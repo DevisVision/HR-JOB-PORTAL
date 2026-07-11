@@ -1,0 +1,3 @@
+git add .github/workflows/daily_update.yml fetch_jobs.py
+git commit -m "Add automated job update workflow"
+git push origin main
