@@ -4,34 +4,13 @@ import streamlit as st
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-def load_css():
+def load_css(css_file):
 
-    css_folder = BASE_DIR / "styles"
+    css_path = BASE_DIR / css_file
 
-    css_files = [
-        "theme.css",
-        "layout.css",
-        "header.css",
-        "sidebar.css",
-        "search.css",
-        "jobcard.css",
-        "footer.css",
-        "responsive.css",
-    ]
+    with open(css_path, encoding="utf-8") as f:
 
-    css = ""
-
-    for file in css_files:
-
-        path = css_folder / file
-
-        if path.exists():
-
-            with open(path, encoding="utf-8") as f:
-
-                css += f.read()
-
-    st.markdown(
-        f"<style>{css}</style>",
-        unsafe_allow_html=True,
-    )
+        st.markdown(
+            f"<style>{f.read()}</style>",
+            unsafe_allow_html=True,
+        )

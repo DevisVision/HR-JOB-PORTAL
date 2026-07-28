@@ -1,72 +1,11 @@
 """
 Lever Job Normalizer
-
-Converts Lever jobs into the VisionBoard standard schema.
 """
 
 
 def normalize(job):
 
-    if not job:
-        return None
-
-    # -------------------------------------------------------
-    # Categories
-    # -------------------------------------------------------
-
     categories = job.get("categories", {})
-
-    location = categories.get("location", "")
-
-    employment = categories.get("commitment", "")
-
-    work_mode = categories.get("workplace", "")
-
-    # -------------------------------------------------------
-    # Country Detection
-    # -------------------------------------------------------
-
-    country = ""
-
-    if location:
-
-        location_lower = location.lower()
-
-        if "india" in location_lower:
-
-            country = "India"
-
-        elif "remote" in location_lower:
-
-            country = "Remote"
-
-    # -------------------------------------------------------
-    # Description
-    # -------------------------------------------------------
-
-    description = (
-        job.get("descriptionPlain")
-        or job.get("description")
-        or ""
-    )
-
-    # -------------------------------------------------------
-    # Posted Date
-    # -------------------------------------------------------
-
-    posted = ""
-
-    if job.get("createdAt"):
-
-        posted = str(job.get("createdAt"))
-
-    elif job.get("updatedAt"):
-
-        posted = str(job.get("updatedAt"))
-
-    # -------------------------------------------------------
-    # Return Standard Format
-    # -------------------------------------------------------
 
     return {
 
@@ -74,24 +13,25 @@ def normalize(job):
 
         "title": job.get("text", ""),
 
-        "company": job.get(
-            "company_name",
-            "Unknown Company"
+        "company": job.get("company_name", ""),
+
+        "location": categories.get("location", ""),
+
+        "country": "",
+
+        "employment_type": categories.get(
+            "commitment",
+            ""
         ),
-
-        "location": location,
-
-        "country": country,
-
-        "employment_type": employment,
-
-        "work_mode": work_mode,
 
         "skills": "",
 
         "salary": "",
 
-        "description": description,
+        "description": job.get(
+            "descriptionPlain",
+            ""
+        ),
 
         "source": "Lever",
 
@@ -100,5 +40,6 @@ def normalize(job):
             ""
         ),
 
-        "posted_date": posted
+        "posted_date": ""
+
     }

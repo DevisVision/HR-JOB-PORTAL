@@ -9,222 +9,167 @@ import streamlit as st
 
 
 def show_job_card(job):
-
-    # ---------------------------------------------------
-    # Job Details
-    # ---------------------------------------------------
+    """
+    Render a professional job card.
+    """
 
     title = job.get("title", "Job Title")
-
     company = job.get("company", "Unknown Company")
-
     location = job.get("location", "Location Not Available")
-
     employment = job.get("employment_type", "Not Specified")
-
-    work_mode = job.get("work_mode", "")
-
     salary = job.get("salary", "Not Disclosed")
-
     posted = str(job.get("posted_date", ""))[:10]
+    description = job.get("description", "No description available.")
+    apply_url = job.get("apply_url", "#")
 
-    source = job.get("source", "VisionBoard")
-
-    description = job.get("description", "")
-
-    apply_url = job.get("apply_url", "")
-
-    company_logo = job.get("company_logo", "")
-
-    skills = job.get("skills", "")
-
-    country = job.get("country", "")
-
-    priority = job.get("priority", 3)
-
-    # ---------------------------------------------------
-    # Badge
-    # ---------------------------------------------------
-
-    if priority == 1:
-        badge = "🇮🇳 India"
-
-    elif priority == 2:
-        badge = "🏠 Remote"
-
-    elif country:
-        badge = f"🌍 {country}"
-
-    else:
-        badge = "🌎 Global"
-
-    # ---------------------------------------------------
-    # Skills
-    # ---------------------------------------------------
-
-    if isinstance(skills, str):
-
-        skills = [
-            x.strip()
-            for x in skills.split(",")
-            if x.strip()
-        ]
-
-    # ---------------------------------------------------
-    # Description
-    # ---------------------------------------------------
-
-    if len(description) > 220:
-        description = description[:220] + "..."
-
-    # ---------------------------------------------------
-    # Unique Key
-    # ---------------------------------------------------
+    logo = company[:1].upper()
 
     unique_id = (
         job.get("job_id")
         or job.get("id")
-        or f"{title}_{company}"
+        or f"{title}_{company}_{location}_{posted}"
     )
 
-    # ---------------------------------------------------
-    # Card
-    # ---------------------------------------------------
+    st.markdown(
+        f"""
+<style>
 
-    with st.container(border=True):
+.job-card{{
+    background:#FFFFFF;
+    border:1px solid #E5E7EB;
+    border-radius:18px;
+    padding:20px;
+    margin-bottom:18px;
+    box-shadow:0 3px 12px rgba(0,0,0,.05);
+}}
 
-        left, right = st.columns([1, 8])
+.job-header{{
+    display:flex;
+    gap:18px;
+}}
 
-        # -----------------------------------------------
+.job-logo{{
+    width:60px;
+    height:60px;
+    border-radius:14px;
+    background:#0F4C81;
+    color:white;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:24px;
+    font-weight:bold;
+}}
 
-        with left:
+.job-title{{
+    font-size:24px;
+    font-weight:700;
+    color:#1E293B;
+}}
 
-            if company_logo:
+.job-company{{
+    font-size:16px;
+    color:#334155;
+    margin-top:4px;
+}}
 
-                st.image(
-                    company_logo,
-                    width=60,
-                )
+.job-location{{
+    color:#64748B;
+    margin-top:6px;
+}}
 
-            else:
+.job-tags{{
+    margin-top:16px;
+}}
 
-                st.markdown(
-                    f"""
-                    <div style="
-                        width:60px;
-                        height:60px;
-                        border-radius:50%;
-                        background:#0F4C81;
-                        color:white;
-                        display:flex;
-                        align-items:center;
-                        justify-content:center;
-                        font-size:24px;
-                        font-weight:bold;
-                    ">
-                        {company[:1].upper()}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+.tag{{
+    display:inline-block;
+    background:#EFF6FF;
+    border:1px solid #BFDBFE;
+    color:#0F4C81;
+    padding:6px 12px;
+    border-radius:20px;
+    margin-right:8px;
+    font-size:13px;
+    font-weight:600;
+}}
 
-        # -----------------------------------------------
+</style>
 
-        with right:
+<div class="job-card">
 
-            st.markdown(
-                f"### {title}"
-            )
+<div class="job-header">
 
-            st.caption(f"🏢 {company}")
+<div class="job-logo">
+{logo}
+</div>
 
-            c1, c2, c3, c4 = st.columns(4)
+<div style="flex:1">
 
-            with c1:
-                st.caption(f"📍 {location}")
+<div class="job-title">
+{title}
+</div>
 
-            with c2:
+<div class="job-company">
+🏢 {company}
+</div>
 
-                if work_mode:
+<div class="job-location">
+📍 {location}
+</div>
 
-                    st.caption(f"🏠 {work_mode}")
+<div class="job-tags">
 
-                else:
+<span class="tag">
+💼 {employment}
+</span>
 
-                    st.caption(f"💼 {employment}")
+<span class="tag">
+💰 {salary}
+</span>
 
-            with c3:
+<span class="tag">
+📅 {posted}
+</span>
 
-                st.caption(f"💰 {salary}")
+</div>
 
-            with c4:
+</div>
 
-                st.caption(f"📅 {posted}")
+</div>
 
-            if skills:
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
-                st.write(
-                    " • ".join(skills[:6])
-                )
+    col1, col2, col3 = st.columns([2.2, 1.3, 1])
 
-            st.write(description)
+    with col1:
 
-            st.caption(
-                f"{badge} | Source: {source}"
-            )
-
-        st.divider()
-
-        # ---------------------------------------------------
-        # Buttons
-        # ---------------------------------------------------
-
-        b1, b2, b3 = st.columns([2, 1, 1])
-
-        with b1:
-
-            if apply_url:
-
-                st.link_button(
-                    "🚀 Apply Now",
-                    apply_url,
-                    use_container_width=True,
-                )
-
-            else:
-
-                st.button(
-                    "🚀 Apply",
-                    disabled=True,
-                    key=f"apply_{unique_id}",
-                    use_container_width=True,
-                )
-
-        with b2:
-
-            st.button(
-                "⭐ Save",
-                key=f"save_{unique_id}",
+        if apply_url and apply_url != "#":
+            st.link_button(
+                "🚀 Apply Now",
+                apply_url,
                 use_container_width=True,
             )
+        else:
+            st.button(
+                "🚀 Apply Now",
+                disabled=True,
+                use_container_width=True,
+                key=f"apply_{unique_id}",
+            )
 
-        with b3:
+    with col2:
 
-            if apply_url:
+        with st.expander("View Details"):
+            st.write(description)
 
-                st.link_button(
-                    "🔗 Share",
-                    apply_url,
-                    use_container_width=True,
-                )
+    with col3:
 
-            else:
-
-                st.button(
-                    "🔗 Share",
-                    disabled=True,
-                    key=f"share_{unique_id}",
-                    use_container_width=True,
-                )
-
-    st.write("")
+        st.button(
+            "⭐ Save",
+            key=f"save_{unique_id}",
+            use_container_width=True,
+        )

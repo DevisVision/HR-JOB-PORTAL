@@ -1,14 +1,17 @@
 """
-services/aggregators/greenhouse.py
+Greenhouse Jobs Aggregator
 
-Fetch jobs from Greenhouse public job boards.
+Fetches jobs from Greenhouse public job boards.
 """
 
 import requests
 
-HEADERS = {
-    "User-Agent": "VisionBoard-JobPortal"
-}
+from services.filters.job_filter import is_relevant_job
+
+
+# ----------------------------------------------------------
+# Public Greenhouse Job Boards
+# ----------------------------------------------------------
 
 GREENHOUSE_COMPANIES = [
 
@@ -64,14 +67,22 @@ GREENHOUSE_COMPANIES = [
     "unity",
     "vercel",
     "webflow",
-    "zapier",
+    "zapier"
 
 ]
 
 
+HEADERS = {
+
+    "User-Agent": "Mozilla/5.0"
+
+}
+
+
 def fetch_greenhouse_jobs():
+
     """
-    Fetch raw jobs from all configured Greenhouse boards.
+    Fetch jobs from all configured Greenhouse boards.
     """
 
     all_jobs = []
@@ -86,26 +97,49 @@ def fetch_greenhouse_jobs():
         try:
 
             response = requests.get(
+
                 url,
+
                 headers=HEADERS,
-                timeout=30,
+
+                timeout=30
+
             )
 
             if response.status_code != 200:
                 continue
 
-            jobs = response.json().get("jobs", [])
+            data = response.json()
+
+            jobs = data.get("jobs", [])
 
             for job in jobs:
+
+                title = job.get("title", "")
+
+                description = ""
+
+                if not is_relevant_job(
+
+                    title=title,
+
+                    description=description,
+
+                    tags=""
+
+                ):
+
+                    continue
 
                 job["company_name"] = company.title()
 
                 all_jobs.append(job)
 
         except Exception:
+
             continue
 
-    print(f"Greenhouse: {len(all_jobs)} jobs received.")
+    print(f"Greenhouse : {len(all_jobs)} matching jobs.")
 
     return all_jobs
 
@@ -114,4 +148,10 @@ if __name__ == "__main__":
 
     jobs = fetch_greenhouse_jobs()
 
-    print(len(jobs))
+    print(f"Retrieved {len(jobs)} jobs")
+
+    if jobs:
+
+        print("\nSample Job\n")
+
+        print(jobs[0])
