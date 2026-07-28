@@ -1,98 +1,57 @@
 """
 =========================================================
-VisionBoard Career Portal
-Professional Header
+VisionBoard Professional Header
 =========================================================
 """
 
 from pathlib import Path
-import base64
 import streamlit as st
 
 
-# -------------------------------------------------------
-# Load Logo
-# -------------------------------------------------------
-
-def _load_logo():
-
-    logo_path = Path("assets/VisionBoard.png")
-
-    if logo_path.exists():
-        with open(logo_path, "rb") as img:
-            return base64.b64encode(img.read()).decode()
-
-    return ""
-
-
-# -------------------------------------------------------
-# Header
-# -------------------------------------------------------
-
 def show_header():
+    """
+    Professional Header
+    """
 
-    logo = _load_logo()
+    logo = Path("assets/VisionBoard.png")
 
-    c1, c2 = st.columns([1, 5])
+    left, right = st.columns([1, 5])
 
-    with c1:
+    # ----------------------------------------------------
+    # Logo
+    # ----------------------------------------------------
 
-        if logo:
-            st.image("assets/VisionBoard.png", width=80)
+    with left:
 
-    with c2:
+        if logo.exists():
+
+            st.image(str(logo), width=130)
+
+    # ----------------------------------------------------
+    # Title
+    # ----------------------------------------------------
+
+    with right:
 
         st.markdown(
             """
             <h1 style="
                 margin-bottom:0;
-                color:#0F172A;
-                font-size:42px;
-                font-weight:800;
+                color:#0F4C81;
+                font-weight:700;
             ">
-            🚀 VisionBoard Career Portal
+                VisionBoard Career Portal
             </h1>
+
+            <div style="
+                color:#64748B;
+                font-size:16px;
+                margin-top:-5px;
+            ">
+                Discover the latest jobs from multiple job providers across India and worldwide.
+            </div>
             """,
             unsafe_allow_html=True,
         )
-
-        st.caption(
-            "AI-powered Job Search Platform for Data Engineering • AI • Cloud • Analytics"
-        )
-
-    st.write("")
-
-    c1, c2, c3 = st.columns([5, 2, 1])
-
-    with c1:
-
-        st.text_input(
-            "Search Jobs",
-            placeholder="Search Jobs, Skills or Companies...",
-            label_visibility="collapsed",
-            key="header_search",
-        )
-
-    with c2:
-
-        st.selectbox(
-            "Category",
-            [
-                "All Jobs",
-                "India",
-                "Rest of World",
-                "Remote"
-            ],
-            label_visibility="collapsed",
-            key="header_category",
-        )
-
-    with c3:
-        st.empty()
-        #st.button(
-       #     "Login",
-       #     use_container_width=True,
-       #     key="login_button",
-        #)
 
     st.divider()

@@ -1,17 +1,14 @@
 """
-Lever Jobs Aggregator
+services/aggregators/lever.py
 
-Fetches jobs from Lever public job boards.
+Fetch jobs from Lever public job boards.
 """
 
 import requests
 
-from services.filters.job_filter import is_relevant_job
-
-
-# ----------------------------------------------------------
-# Public Lever Job Boards
-# ----------------------------------------------------------
+HEADERS = {
+    "User-Agent": "VisionBoard-JobPortal"
+}
 
 LEVER_COMPANIES = [
 
@@ -28,22 +25,14 @@ LEVER_COMPANIES = [
     "scale-ai",
     "rippling",
     "canva",
-    "headspace"
+    "headspace",
 
 ]
 
 
-HEADERS = {
-
-    "User-Agent": "Mozilla/5.0"
-
-}
-
-
 def fetch_lever_jobs():
-
     """
-    Fetch jobs from all configured Lever boards.
+    Fetch raw jobs from all Lever boards.
     """
 
     all_jobs = []
@@ -58,53 +47,28 @@ def fetch_lever_jobs():
         try:
 
             response = requests.get(
-
                 url,
-
                 headers=HEADERS,
-
-                timeout=30
-
+                timeout=30,
             )
-            print(f"{company} -> {response.status_code}")
+
             if response.status_code != 200:
                 continue
 
             jobs = response.json()
-            print(f"{company}: {len(jobs)} jobs")
+
             for job in jobs:
 
-                title = job.get("text", "")
-
-                description = job.get(
-                    "descriptionPlain",
-                    ""
+                job["company_name"] = (
+                    company.replace("-", " ").title()
                 )
-
-                if not is_relevant_job(
-
-                    title=title,
-
-                    description=description,
-
-                    tags=""
-
-                ):
-
-                    continue
-
-                job["company_name"] = company.replace(
-                    "-",
-                    " "
-                ).title()
 
                 all_jobs.append(job)
 
         except Exception:
-
             continue
 
-    print(f"Lever : {len(all_jobs)} matching jobs.")
+    print(f"Lever: {len(all_jobs)} jobs received.")
 
     return all_jobs
 
@@ -113,10 +77,4 @@ if __name__ == "__main__":
 
     jobs = fetch_lever_jobs()
 
-    print(f"Retrieved {len(jobs)} jobs")
-
-    if jobs:
-
-        print("\nSample Job\n")
-
-        print(jobs[0])
+    print(len(jobs))    

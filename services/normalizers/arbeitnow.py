@@ -1,6 +1,10 @@
 """
-Normalize Arbeitnow jobs.
+services/normalizers/arbeitnow.py
+
+Normalize Arbeitnow jobs into the VisionBoard standard schema.
 """
+
+from services.company_logo import get_company_logo
 
 
 def normalize(job):
@@ -8,21 +12,43 @@ def normalize(job):
     if not job:
         return None
 
+    company = job.get("company_name", "").strip()
+
+    location = job.get("location", "")
+
     tags = job.get("tags", [])
+
+    country = ""
+
+    if location:
+
+        loc = location.lower()
+
+        if "india" in loc:
+            country = "India"
+
+        elif "remote" in loc:
+            country = "Remote"
 
     return {
 
-        "job_id": str(job.get("slug")),
+        "job_id": str(job.get("slug", "")),
 
         "title": job.get("title", ""),
 
-        "company": job.get("company_name", ""),
+        "company": company,
 
-        "location": job.get("location", ""),
+        "company_logo": get_company_logo(company),
 
-        "country": "",
+        "location": location,
+
+        "country": country,
 
         "employment_type": job.get("job_type", ""),
+
+        "work_mode": "",
+
+        "job_category": "",
 
         "skills": ", ".join(tags),
 
@@ -34,5 +60,9 @@ def normalize(job):
 
         "apply_url": job.get("url", ""),
 
-        "posted_date": job.get("created_at", "")
+        "priority": 2,
+
+        "is_active": 1,
+
+        "posted_date": job.get("created_at", ""),
     }

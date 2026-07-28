@@ -1,284 +1,223 @@
 """
-=========================================================
-VisionBoard Career Portal
-Home Page
-=========================================================
+pages/home.py
 """
 
 import math
 import streamlit as st
 
 from database.db_service import (
-    get_jobs_by_category,
     search_jobs,
+    get_latest_india_jobs,
+    get_latest_global_jobs,
 )
 
 from components.job_card import show_job_card
 
 
-# ==========================================================
-# Home Page
-# ==========================================================
-
 def show_home(
-    category,
     keyword,
-    employment_type,
-    posted,
+    category,
+    employment,
     source,
-    sort_by,
+    posted,
 ):
 
-    # ------------------------------------------------------
+    # =====================================================
     # Load Jobs
-    # ------------------------------------------------------
+    # =====================================================
 
-    with st.spinner("Loading latest opportunities..."):
+    if keyword.strip():
 
-        if keyword.strip():
+        jobs = search_jobs(
+            keyword=keyword,
+            category=category,
+        )
 
-            jobs = search_jobs(
-                keyword=keyword,
-                category=category,
-            )
+    else:
+
+        if category == "India":
+
+            jobs = get_latest_india_jobs(limit=200)
+
+        elif category == "Rest of World":
+
+            jobs = get_latest_global_jobs(limit=200)
 
         else:
 
-            jobs = get_jobs_by_category(
-                category=category,
-                limit=500,
+            jobs = (
+                get_latest_india_jobs(limit=200)
+                + get_latest_global_jobs(limit=200)
             )
 
-    # ------------------------------------------------------
-    # India / Rest of World Filter
-    # ------------------------------------------------------
-
-    if category == "India":
-
-        jobs = [
-            j for j in jobs
-            if "india" in str(j.get("country", "")).lower()
-            or "india" in str(j.get("location", "")).lower()
-        ]
-
-    elif category == "Rest of World":
-
-        jobs = [
-            j for j in jobs
-            if "india" not in str(j.get("country", "")).lower()
-            and "india" not in str(j.get("location", "")).lower()
-        ]
-
-    # ------------------------------------------------------
+    # =====================================================
     # Employment Filter
-    # ------------------------------------------------------
+    # =====================================================
 
-    if employment_type != "All":
+    if employment != "All":
 
         jobs = [
-            j for j in jobs
-            if employment_type.lower()
-            in str(j.get("employment_type", "")).lower()
+            j
+            for j in jobs
+            if employment.lower()
+            in str(
+                j.get(
+                    "employment_type",
+                    "",
+                )
+            ).lower()
         ]
 
-    # ------------------------------------------------------
+    # =====================================================
     # Source Filter
-    # ------------------------------------------------------
+    # =====================================================
 
     if source != "All":
 
         jobs = [
-            j for j in jobs
+            j
+            for j in jobs
             if source.lower()
-            == str(j.get("source", "")).lower()
+            == str(
+                j.get(
+                    "source",
+                    "",
+                )
+            ).lower()
         ]
 
-    # ------------------------------------------------------
-    # Sort by Company / Latest
-    # ------------------------------------------------------
+    # =====================================================
+    # Posted Filter
+    # =====================================================
 
-    if sort_by == "Company":
+    if posted == "24 Hours":
 
-        jobs = sorted(
-            jobs,
-            key=lambda x: str(x.get("company", "")).lower()
-        )
+        jobs = jobs[:25]
 
-    elif sort_by == "Latest":
+    elif posted == "3 Days":
 
-        jobs = sorted(
-            jobs,
-            key=lambda x: str(x.get("posted_date", "")),
-            reverse=True,
-        )
+        jobs = jobs[:75]
 
-    # ------------------------------------------------------
-    # India First Priority
-    # ------------------------------------------------------
+    elif posted == "7 Days":
 
-    INDIA_CITIES = [
-        "bangalore",
-        "bengaluru",
-        "hyderabad",
-        "pune",
-        "mumbai",
-        "delhi",
-        "new delhi",
-        "gurgaon",
-        "gurugram",
-        "noida",
-        "chennai",
-        "kolkata",
-        "ahmedabad",
-        "kochi",
-        "cochin",
-        "trivandrum",
-        "thiruvananthapuram",
-        "coimbatore",
-        "mysore",
-        "india",
-    ]
+        jobs = jobs[:150]
 
-    india_jobs = []
-    world_jobs = []
-
-    for job in jobs:
-
-        text = (
-            str(job.get("country", "")) + " " +
-            str(job.get("location", ""))
-        ).lower()
-
-        if any(city in text for city in INDIA_CITIES):
-            india_jobs.append(job)
-        else:
-            world_jobs.append(job)
-
-    jobs = india_jobs + world_jobs
-
-    # ------------------------------------------------------
+    # =====================================================
     # Header
-    # ------------------------------------------------------
+    # =====================================================
 
-    col1, col2 = st.columns([4, 1])
+    st.markdown(
+        f"""
+        <h3 style="margin-bottom:0;">
+            {len(jobs)} Live Jobs
+        </h3>
 
-    with col1:
+        <p style="color:#64748B;">
+            Updated automatically every 6 hours
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        st.markdown("## 💼 Latest Opportunities")
+    # =====================================================
+    # Toolbar
+    # =====================================================
 
-        st.caption(
-            f"{len(jobs)} verified jobs from trusted job portals"
+    left, right = st.columns([3, 1])
+
+    with left:
+
+        sort = st.selectbox(
+            "Sort",
+            [
+                "Latest",
+                "Company",
+                "Location",
+            ],
         )
 
-    with col2:
+    with right:
 
-        show_all = st.checkbox(
-            "Show All",
-            value=False,
+        page_size = st.selectbox(
+            "Jobs / Page",
+            [
+                10,
+                20,
+                50,
+            ],
+            index=0,
         )
 
-    st.divider()
+    # =====================================================
+    # Sorting
+    # =====================================================
 
-    # ------------------------------------------------------
-    # No Jobs
-    # ------------------------------------------------------
+    if sort == "Company":
 
-    if len(jobs) == 0:
+        jobs = sorted(
+            jobs,
+            key=lambda x: x.get("company", ""),
+        )
 
-        st.warning("No matching jobs found.")
+    elif sort == "Location":
 
-        return
+        jobs = sorted(
+            jobs,
+            key=lambda x: x.get("location", ""),
+        )
 
-    # ------------------------------------------------------
+    # =====================================================
     # Pagination
-    # ------------------------------------------------------
+    # =====================================================
 
-    if show_all:
+    total_pages = max(
+        1,
+        math.ceil(len(jobs) / page_size),
+    )
 
-        jobs_to_show = jobs
+    if "page" not in st.session_state:
 
-        st.success(f"Showing all {len(jobs)} jobs")
+        st.session_state.page = 1
 
-    else:
+    p1, p2, p3 = st.columns([1, 6, 1])
 
-        PAGE_SIZE = 10
+    with p1:
 
-        total_pages = max(
-            1,
-            math.ceil(len(jobs) / PAGE_SIZE)
-        )
+        if st.button("⬅ Previous"):
 
-        if "page" not in st.session_state:
-            st.session_state.page = 1
-
-        page = st.session_state.page
-
-        if page > total_pages:
-            page = total_pages
-            st.session_state.page = page
-
-        start = (page - 1) * PAGE_SIZE
-        end = start + PAGE_SIZE
-
-        jobs_to_show = jobs[start:end]
-
-        left, middle, right = st.columns([2, 4, 2])
-
-        with left:
-
-            if st.button(
-                "⬅ Previous",
-                disabled=(page == 1),
-            ):
+            if st.session_state.page > 1:
 
                 st.session_state.page -= 1
-                st.rerun()
 
-        with middle:
+    with p3:
 
-            st.markdown(
-                f"""
-                <div style="
-                text-align:center;
-                font-weight:600;
-                padding-top:8px;
-                ">
-                Page {page} of {total_pages}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        if st.button("Next ➜"):
 
-        with right:
-
-            if st.button(
-                "Next ➜",
-                disabled=(page == total_pages),
-            ):
+            if st.session_state.page < total_pages:
 
                 st.session_state.page += 1
-                st.rerun()
 
-        st.info(
-            f"Showing {start+1}-{min(end,len(jobs))} of {len(jobs)} jobs"
-        )
+    page = st.session_state.page
 
-    # ------------------------------------------------------
+    start = (page - 1) * page_size
+    end = start + page_size
+
+    # =====================================================
     # Job Cards
-    # ------------------------------------------------------
+    # =====================================================
 
-    for job in jobs_to_show:
+    for job in jobs[start:end]:
 
         show_job_card(job)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.write("")
 
-    # ------------------------------------------------------
-    # Footer Summary
-    # ------------------------------------------------------
+    # =====================================================
+    # Footer
+    # =====================================================
 
     st.divider()
 
     st.caption(
-        f"VisionBoard Career Portal • {len(jobs)} Live Opportunities"
+        f"Showing {start+1}-{min(end,len(jobs))} of {len(jobs)} jobs | Page {page} of {total_pages}"
     )

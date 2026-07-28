@@ -1,8 +1,5 @@
 """
-=========================================================
-VisionBoard Career Portal
-Professional Search & Filters
-=========================================================
+components/filters.py
 """
 
 import streamlit as st
@@ -10,20 +7,18 @@ import streamlit as st
 
 def show_filters():
 
-    st.markdown("## 🔎 Search Jobs")
+    c1, c2, c3, c4 = st.columns([3, 2, 2, 2])
 
-    search, location = st.columns([4, 2])
-
-    with search:
+    with c1:
         keyword = st.text_input(
             "Search",
-            placeholder="Python, Azure, Databricks, Spark, GenAI...",
+            placeholder="Python, Azure, Databricks, Spark...",
             label_visibility="collapsed",
         )
 
-    with location:
-        job_location = st.selectbox(
-            "Location",
+    with c2:
+        category = st.selectbox(
+            "Category",
             [
                 "All Jobs",
                 "India",
@@ -33,98 +28,28 @@ def show_filters():
             label_visibility="collapsed",
         )
 
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
+    with c3:
         employment = st.selectbox(
             "Employment",
             [
                 "All",
                 "Full Time",
-                "Part Time",
                 "Contract",
                 "Internship",
+                "Hybrid",
             ],
+            label_visibility="collapsed",
         )
 
-    with c2:
-        source = st.selectbox(
-            "Source",
-            [
-                "All",
-                "Adzuna",
-                "ArbeitNow",
-            ],
+    with c4:
+        search_clicked = st.button(
+            "🔍 Search",
+            use_container_width=True,
         )
-
-    with c3:
-        sort_by = st.selectbox(
-            "Sort By",
-            [
-                "Latest",
-                "Relevance",
-                "Company",
-            ],
-        )
-
-    with st.expander("⚙ Advanced Filters", expanded=False):
-
-        a1, a2 = st.columns(2)
-
-        with a1:
-
-            experience = st.selectbox(
-                "Experience",
-                [
-                    "All",
-                    "Fresher",
-                    "1-3 Years",
-                    "3-5 Years",
-                    "5+ Years",
-                ],
-            )
-
-            salary = st.selectbox(
-                "Salary",
-                [
-                    "Any",
-                    "5 LPA+",
-                    "10 LPA+",
-                    "20 LPA+",
-                    "30 LPA+",
-                ],
-            )
-
-        with a2:
-
-            work_mode = st.selectbox(
-                "Work Mode",
-                [
-                    "All",
-                    "Remote",
-                    "Hybrid",
-                    "Onsite",
-                ],
-            )
-
-            posted = st.selectbox(
-                "Posted Within",
-                [
-                    "Any Time",
-                    "24 Hours",
-                    "3 Days",
-                    "7 Days",
-                    "30 Days",
-                ],
-            )
-
-    st.divider()
 
     return (
-        job_location,
         keyword,
+        category,
         employment,
-        posted,
-        source,
-        sort_by,
+        search_clicked,
     )

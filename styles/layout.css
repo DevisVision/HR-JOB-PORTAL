@@ -1,0 +1,246 @@
+/*=========================================================
+LAYOUT
+=========================================================*/
+
+/* Main Page */
+
+.main .block-container{
+
+    max-width:1600px;
+
+    padding-top:25px;
+
+    padding-bottom:40px;
+
+    padding-left:40px;
+
+    padding-right:40px;
+
+}
+
+
+/*=========================================================
+Columns
+=========================================================*/
+
+div[data-testid="column"]{
+
+    padding-top:0px;
+
+}
+
+
+/* Left Sidebar */
+
+div[data-testid="column"]:first-child{
+
+    padding-right:20px;
+
+}
+
+
+/* Main Content */
+
+div[data-testid="column"]:last-child{
+
+    padding-left:10px;
+
+}
+
+
+/*=========================================================
+Section Card
+=========================================================*/
+
+.vb-section{
+
+    background:white;
+
+    border:1px solid #E5E7EB;
+
+    border-radius:18px;
+
+    padding:22px;
+
+    margin-bottom:24px;
+
+    box-shadow:0 4px 18px rgba(0,0,0,.05);
+
+}
+
+
+/*=========================================================
+Section Header
+=========================================================*/
+
+.vb-section-title{
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    margin-bottom:20px;
+
+}
+
+.vb-section-title h2{
+
+    margin:0;
+
+    font-size:28px;
+
+    font-weight:700;
+
+    color:#1E293B;
+
+}
+
+.vb-section-sub{
+
+    color:#64748B;
+
+    font-size:14px;
+
+    margin-top:4px;
+
+}
+
+
+/*=========================================================
+Badge
+=========================================================*/
+
+.vb-badge{
+
+    background:#EFF6FF;
+
+    color:#0F4C81;
+
+    padding:8px 16px;
+
+    border-radius:999px;
+
+    font-size:13px;
+
+    font-weight:700;
+
+    border:1px solid #BFDBFE;
+
+}
+
+
+/*=========================================================
+Divider
+=========================================================*/
+
+.vb-divider{
+
+    height:1px;
+
+    background:#E5E7EB;
+
+    margin:25px 0;
+
+}
+
+
+/*=========================================================
+Spacing Helpers
+=========================================================*/
+
+.mt10{
+
+    margin-top:10px;
+
+}
+
+.mt20{
+
+    margin-top:20px;
+
+}
+
+.mt30{
+
+    margin-top:30px;
+
+}
+
+.mb10{
+
+    margin-bottom:10px;
+
+}
+
+.mb20{
+
+    margin-bottom:20px;
+
+}
+
+.mb30{
+
+    margin-bottom:30px;
+
+}
+
+
+/*=========================================================
+Containers
+=========================================================*/
+
+.vb-container{
+
+    width:100%;
+
+}
+
+.vb-flex{
+
+    display:flex;
+
+    align-items:center;
+
+    gap:15px;
+
+}
+
+.vb-flex-between{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+}
+
+
+/*=========================================================
+Responsive
+=========================================================*/
+
+@media (max-width:1200px){
+
+.main .block-container{
+
+    padding-left:20px;
+
+    padding-right:20px;
+
+}
+
+}
+
+
+@media (max-width:900px){
+
+div[data-testid="column"]{
+
+    width:100% !important;
+
+}
+
+}

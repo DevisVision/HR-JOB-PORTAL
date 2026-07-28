@@ -112,34 +112,90 @@ def insert_job(job: Dict):
     cursor.execute(
         """
         INSERT OR REPLACE INTO jobs (
-            job_id,
-            title,
-            company,
-            location,
-            country,
-            employment_type,
-            skills,
-            salary,
-            description,
-            source,
-            apply_url,
-            posted_date,
-            updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+
+                job_id,
+
+                title,
+
+                company,
+
+                company_logo,
+
+                location,
+
+                country,
+
+                employment_type,
+
+                work_mode,
+
+                job_category,
+
+                skills,
+
+                salary,
+
+                description,
+
+                source,
+
+                apply_url,
+
+                priority,
+
+                is_active,
+
+                posted_date,
+
+                created_at,
+
+                updated_at
+
+            )
+
+            VALUES (
+
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+
+                CURRENT_TIMESTAMP,
+
+                CURRENT_TIMESTAMP
+
+            )
         """,
         (
             job.get("job_id"),
+
             job.get("title"),
+
             job.get("company"),
+
+            job.get("company_logo", ""),
+
             job.get("location"),
+
             job.get("country"),
+
             job.get("employment_type"),
+
+            job.get("work_mode", ""),
+
+            job.get("job_category", ""),
+
             job.get("skills"),
+
             job.get("salary"),
+
             job.get("description"),
+
             job.get("source"),
+
             job.get("apply_url"),
+
+            job.get("priority", 99),
+
+            job.get("is_active", 1),
+
             job.get("posted_date"),
         ),
     )
@@ -165,19 +221,40 @@ def insert_jobs(jobs: List[Dict]):
     records = []
 
     for job in jobs:
-        records.append(
+                records.append(
             (
                 job.get("job_id"),
+
                 job.get("title"),
+
                 job.get("company"),
+
+                job.get("company_logo", ""),
+
                 job.get("location"),
+
                 job.get("country"),
+
                 job.get("employment_type"),
+
+                job.get("work_mode", ""),
+
+                job.get("job_category", ""),
+
                 job.get("skills"),
+
                 job.get("salary"),
+
                 job.get("description"),
+
                 job.get("source"),
+
                 job.get("apply_url"),
+
+                job.get("priority", 99),
+
+                job.get("is_active", 1),
+
                 job.get("posted_date"),
             )
         )
@@ -185,21 +262,56 @@ def insert_jobs(jobs: List[Dict]):
     cursor.executemany(
         """
         INSERT OR REPLACE INTO jobs (
-            job_id,
-            title,
-            company,
-            location,
-            country,
-            employment_type,
-            skills,
-            salary,
-            description,
-            source,
-            apply_url,
-            posted_date,
-            updated_at
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+
+                job_id,
+
+                title,
+
+                company,
+
+                company_logo,
+
+                location,
+
+                country,
+
+                employment_type,
+
+                work_mode,
+
+                job_category,
+
+                skills,
+
+                salary,
+
+                description,
+
+                source,
+
+                apply_url,
+
+                priority,
+
+                is_active,
+
+                posted_date,
+
+                created_at,
+
+                updated_at
+
+            )
+
+            VALUES (
+
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+
+                CURRENT_TIMESTAMP,
+
+                CURRENT_TIMESTAMP
+
+            )
         """,
         records,
     )
@@ -212,6 +324,16 @@ def insert_jobs(jobs: List[Dict]):
 # Latest Jobs
 # =====================================================
 def get_jobs(limit: int = 100):
+    """
+    Returns active jobs.
+
+    Sorting Priority:
+    1. India Jobs
+    2. Remote Jobs
+    3. Global Jobs
+
+    Within each group, newest jobs appear first.
+    """
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -220,13 +342,24 @@ def get_jobs(limit: int = 100):
         """
         SELECT *
         FROM jobs
-        ORDER BY updated_at DESC
+
+        WHERE is_active = 1
+
+        ORDER BY
+
+            priority ASC,
+
+            datetime(posted_date) DESC,
+
+            datetime(updated_at) DESC
+
         LIMIT ?
         """,
         (limit,),
     )
 
     rows = [dict(row) for row in cursor.fetchall()]
+
     conn.close()
 
     return rows
@@ -419,3 +552,95 @@ def get_remote_job_count():
             limit=10000
         )
     )
+# =====================================================
+# Latest India Jobs
+# =====================================================
+
+def get_latest_india_jobs(limit=20):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+        FROM jobs
+        WHERE
+            priority = 1
+            AND is_active = 1
+        ORDER BY
+            DATE(posted_date) DESC,
+            updated_at DESC
+        LIMIT ?
+        """,
+        (limit,)
+    )
+
+    rows = [dict(r) for r in cursor.fetchall()]
+
+    conn.close()
+
+    return rows
+
+
+# =====================================================
+# Today's Jobs
+# =====================================================
+
+def get_today_jobs(limit=20):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+        FROM jobs
+        WHERE
+            DATE(posted_date) = DATE('now')
+            AND is_active = 1
+        ORDER BY
+            priority ASC,
+            updated_at DESC
+        LIMIT ?
+        """,
+        (limit,)
+    )
+
+    rows = [dict(r) for r in cursor.fetchall()]
+
+    conn.close()
+
+    return rows
+
+
+# =====================================================
+# Latest Global Jobs
+# =====================================================
+
+def get_latest_global_jobs(limit=20):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT *
+        FROM jobs
+        WHERE
+            priority > 1
+            AND is_active = 1
+        ORDER BY
+            priority ASC,
+            DATE(posted_date) DESC,
+            updated_at DESC
+        LIMIT ?
+        """,
+        (limit,)
+    )
+
+    rows = [dict(r) for r in cursor.fetchall()]
+
+    conn.close()
+
+    return rows

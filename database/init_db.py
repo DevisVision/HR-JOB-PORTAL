@@ -77,23 +77,22 @@ def create_tables(cursor):
 
             title TEXT,
             company TEXT,
+            company_logo TEXT,
             location TEXT,
             country TEXT,
-
             employment_type TEXT,
-
+            work_mode TEXT,
+            job_category TEXT,
             skills TEXT,
-
             salary TEXT,
-
             description TEXT,
-
             source TEXT,
-
             apply_url TEXT,
-
+            priority INTEGER DEFAULT 99,
+            is_active INTEGER DEFAULT 1,
             posted_date TEXT,
-
+            created_at TIMESTAMP
+            DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP
             DEFAULT CURRENT_TIMESTAMP
         )
@@ -155,6 +154,18 @@ def create_indexes(cursor):
 
         CREATE INDEX IF NOT EXISTS idx_updated
         ON jobs(updated_at);
+
+        CREATE INDEX IF NOT EXISTS idx_work_mode
+        ON jobs(work_mode);
+
+        CREATE INDEX IF NOT EXISTS idx_priority
+        ON jobs(priority);
+
+        CREATE INDEX IF NOT EXISTS idx_job_category
+        ON jobs(job_category);
+
+        CREATE INDEX IF NOT EXISTS idx_is_active
+        ON jobs(is_active);
 
         """
     )

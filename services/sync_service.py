@@ -15,6 +15,7 @@ from datetime import datetime
 
 from database.db_service import insert_jobs
 from services.filters.job_filter import is_relevant_job
+from services.enrichment import enrich_job
 
 # ===========================================================
 # Aggregators
@@ -78,6 +79,11 @@ def process_source(
             normalized = normalize_function(job)
 
             if normalized:
+
+    # ---------------------------------------------
+    # Common enrichment
+    # ---------------------------------------------
+                normalized = enrich_job(normalized)
 
                 batch_jobs.append(normalized)
 

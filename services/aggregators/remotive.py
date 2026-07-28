@@ -1,11 +1,18 @@
-import requests
+"""
+services/aggregators/remotive.py
 
-from services.filters.job_filter import is_relevant_job
+Fetch jobs from Remotive API.
+"""
+
+import requests
 
 BASE_URL = "https://remotive.com/api/remote-jobs"
 
 
 def fetch_remotive_jobs():
+    """
+    Fetch raw jobs from Remotive.
+    """
 
     headers = {
         "User-Agent": "VisionBoard-JobPortal"
@@ -16,34 +23,22 @@ def fetch_remotive_jobs():
         response = requests.get(
             BASE_URL,
             headers=headers,
-            timeout=30
+            timeout=30,
         )
 
         response.raise_for_status()
 
         jobs = response.json().get(
             "jobs",
-            []
+            [],
         )
 
-        filtered = []
+        print(f"Remotive: {len(jobs)} jobs received.")
 
-        for job in jobs:
+        return jobs
 
-            if is_relevant_job(
-                job.get("title", ""),
-                job.get("description", ""),
-                " ".join(job.get("tags", []))
-            ):
+    except Exception as ex:
 
-                filtered.append(job)
-
-        print(f"Remotive : {len(filtered)} matching jobs.")
-
-        return filtered
-
-    except Exception as e:
-
-        print(e)
+        print(f"Remotive Error: {ex}")
 
         return []

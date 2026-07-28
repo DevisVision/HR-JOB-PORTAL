@@ -1,0 +1,276 @@
+/*====================================================
+VISIONBOARD PREMIUM JOB CARD
+====================================================*/
+/********************** CARD LAYOUT **********************************/
+.vb-job-card{
+
+    background:#FFFFFF;
+
+    border:1px solid #E8EDF5;
+
+    border-radius:22px;
+
+    padding:24px;
+
+    margin-bottom:22px;
+
+    transition:.25s;
+
+    box-shadow:0 6px 18px rgba(15,23,42,.05);
+
+}
+
+.vb-job-card:hover{
+
+    transform:translateY(-4px);
+
+    box-shadow:0 18px 40px rgba(15,23,42,.12);
+
+    border-color:#C9D7EE;
+
+}
+
+.vb-job-header{
+
+    display:flex;
+
+    align-items:flex-start;
+
+    gap:20px;
+
+}
+
+.vb-company-logo{
+
+    width:72px;
+
+    height:72px;
+
+    border-radius:18px;
+
+    background:#F4F8FC;
+
+    border:1px solid #E2E8F0;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    overflow:hidden;
+
+    flex-shrink:0;
+
+}
+
+.vb-company-logo img{
+
+    width:52px;
+
+    height:52px;
+
+    object-fit:contain;
+
+}
+
+.vb-company-letter{
+
+    font-size:30px;
+
+    font-weight:700;
+
+    color:#0F4C81;
+
+}
+
+.vb-job-content{
+
+    flex:1;
+
+}
+/********************** JOB TITLE **********************************/
+.vb-job-title{
+
+    font-size:26px;
+
+    font-weight:700;
+
+    color:#14213D;
+
+    margin-bottom:6px;
+
+    line-height:1.3;
+
+}
+
+.vb-company-name{
+
+    font-size:17px;
+
+    font-weight:600;
+
+    color:#4B5563;
+
+    margin-bottom:12px;
+
+}
+
+.vb-job-meta{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:10px;
+
+    margin-bottom:16px;
+
+}
+
+.meta-chip{
+
+    background:#F8FAFC;
+
+    border:1px solid #E5E7EB;
+
+    border-radius:20px;
+
+    padding:6px 14px;
+
+    font-size:13px;
+
+    font-weight:600;
+
+    color:#475569;
+
+}
+.vb-skills{
+
+    display:flex;
+
+    flex-wrap:wrap;
+
+    gap:8px;
+
+    margin-bottom:18px;
+
+}
+/********************** SKILLS**********************************/
+.skill-chip{
+
+    background:#EFF6FF;
+
+    color:#0F4C81;
+
+    border:1px solid #BFDBFE;
+
+    padding:6px 12px;
+
+    border-radius:18px;
+
+    font-size:12px;
+
+    font-weight:600;
+
+}
+/********************** DESRIPTION **********************************/
+.vb-description{
+
+    color:#475569;
+
+    line-height:1.7;
+
+    font-size:15px;
+
+    margin-bottom:18px;
+
+}
+/********************** FOOTER **********************************/
+.vb-job-footer{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    border-top:1px solid #EEF2F7;
+
+    padding-top:16px;
+
+    margin-top:10px;
+
+}
+
+.vb-footer-left{
+
+    color:#64748B;
+
+    font-size:13px;
+
+}
+
+.vb-country{
+
+    background:#EAFBF3;
+
+    color:#0E9F6E;
+
+    padding:7px 14px;
+
+    border-radius:18px;
+
+    font-size:12px;
+
+    font-weight:700;
+
+}
+/********************** BUTTONS  **********************************/
+.vb-buttons{
+
+    margin-top:18px;
+
+}
+
+.stButton>button{
+
+    border-radius:12px;
+
+    height:42px;
+
+    border:1px solid #D6DFEA;
+
+    transition:.2s;
+
+    font-weight:600;
+
+}
+
+.stButton>button:hover{
+
+    border-color:#0F4C81;
+
+    color:#0F4C81;
+
+}
+/********************** MOBILE RESPONSIVE **********************************/
+@media(max-width:900px){
+
+.vb-job-header{
+
+    flex-direction:column;
+
+}
+
+.vb-job-footer{
+
+    flex-direction:column;
+
+    align-items:flex-start;
+
+    gap:12px;
+
+}
+
+}
