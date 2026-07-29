@@ -1,0 +1,1103 @@
+/* ============================================================
+   VisionBoard Career Portal
+   Enterprise Theme v2.0
+   Part 1
+============================================================ */
+
+/* ============================================================
+   GOOGLE FONT
+============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+
+/* ============================================================
+   ROOT COLORS
+============================================================ */
+
+:root{
+
+    --primary:#0F4C81;
+    --primary-dark:#073763;
+    --secondary:#1976D2;
+    --accent:#00BFA6;
+
+    --bg:#F5F7FB;
+    --surface:#FFFFFF;
+
+    --text:#172B4D;
+    --text-light:#5E6C84;
+
+    --border:#E3E8EF;
+
+    --success:#2E7D32;
+    --warning:#FF9800;
+    --danger:#E53935;
+
+    --shadow:0 8px 25px rgba(0,0,0,.08);
+
+    --radius:14px;
+
+}
+
+
+/* ============================================================
+   STREAMLIT
+============================================================ */
+
+html,
+body,
+.stApp{
+
+    background:var(--bg);
+    font-family:'Inter',sans-serif;
+    color:var(--text);
+
+}
+
+
+/* remove padding */
+
+.block-container{
+
+    padding-top:1rem;
+    padding-bottom:1rem;
+    padding-left:2rem;
+    padding-right:2rem;
+
+}
+
+
+/* hide default */
+
+#MainMenu{
+
+    visibility:hidden;
+
+}
+
+footer{
+
+    visibility:hidden;
+
+}
+
+header{
+
+    visibility:hidden;
+
+}
+
+
+/* ============================================================
+   LINKS
+============================================================ */
+
+a{
+
+    text-decoration:none !important;
+
+}
+
+
+/* ============================================================
+   HORIZONTAL RULE
+============================================================ */
+
+hr{
+
+    border:none;
+    border-top:1px solid var(--border);
+
+}
+
+
+/* ============================================================
+   HEADER
+============================================================ */
+
+.vb-header{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:18px 28px;
+
+    margin-bottom:18px;
+
+    box-shadow:var(--shadow);
+
+    border:1px solid var(--border);
+
+}
+
+
+.vb-header-logo{
+
+    width:65px;
+
+}
+
+
+.vb-title{
+
+    font-size:34px;
+
+    font-weight:800;
+
+    color:var(--primary);
+
+}
+
+
+.vb-subtitle{
+
+    color:var(--text-light);
+
+    font-size:14px;
+
+}
+
+
+/* ============================================================
+   HERO
+============================================================ */
+
+.hero{
+
+    background:linear-gradient(
+    135deg,
+    #0F4C81,
+    #1976D2);
+
+    border-radius:20px;
+
+    padding:35px;
+
+    color:white;
+
+    margin-bottom:25px;
+
+    box-shadow:var(--shadow);
+
+}
+
+
+.hero h1{
+
+    font-size:42px;
+
+    font-weight:800;
+
+    margin-bottom:10px;
+
+}
+
+
+.hero p{
+
+    font-size:17px;
+
+    opacity:.95;
+
+}
+
+
+/* ============================================================
+   SEARCH BAR
+============================================================ */
+
+.search-container{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:18px;
+
+    margin-bottom:20px;
+
+    border:1px solid var(--border);
+
+    box-shadow:var(--shadow);
+
+}
+
+
+.search-title{
+
+    font-size:28px;
+
+    font-weight:700;
+
+    margin-bottom:14px;
+
+    color:var(--primary);
+
+}
+
+
+/* streamlit input */
+
+.stTextInput input{
+
+    height:52px !important;
+
+    border-radius:12px !important;
+
+    border:1px solid var(--border) !important;
+
+    font-size:16px !important;
+
+}
+
+
+.stSelectbox div[data-baseweb="select"]{
+
+    border-radius:12px;
+
+}
+
+
+/* ============================================================
+   SIDEBAR CARD
+============================================================ */
+
+.sidebar-card{
+
+    background:white;
+
+    border-radius:16px;
+
+    padding:18px;
+
+    margin-bottom:20px;
+
+    border:1px solid var(--border);
+
+    box-shadow:var(--shadow);
+
+}
+
+
+.sidebar-title{
+
+    font-size:24px;
+
+    font-weight:700;
+
+    color:var(--primary);
+
+    margin-bottom:18px;
+
+}
+
+
+/* ============================================================
+   NAVIGATION BUTTONS
+============================================================ */
+
+.nav-btn{
+
+    background:#F8FAFC;
+
+    border:1px solid var(--border);
+
+    border-radius:10px;
+
+    padding:12px;
+
+    margin-bottom:10px;
+
+    transition:.25s;
+
+    cursor:pointer;
+
+}
+
+
+.nav-btn:hover{
+
+    background:var(--primary);
+
+    color:white;
+
+    transform:translateY(-2px);
+
+}
+
+
+/* ============================================================
+   METRIC CARDS
+============================================================ */
+
+.metric-card{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:22px;
+
+    box-shadow:var(--shadow);
+
+    border:1px solid var(--border);
+
+    transition:.30s;
+
+}
+
+
+.metric-card:hover{
+
+    transform:translateY(-4px);
+
+}
+
+
+.metric-title{
+
+    font-size:14px;
+
+    color:var(--text-light);
+
+}
+
+
+.metric-number{
+
+    font-size:34px;
+
+    font-weight:800;
+
+    color:var(--primary);
+
+}
+
+
+/* ============================================================
+   LOCATION FILTER
+============================================================ */
+
+.location-card{
+
+    background:white;
+
+    padding:18px;
+
+    border-radius:16px;
+
+    border:1px solid var(--border);
+
+    margin-bottom:20px;
+
+    box-shadow:var(--shadow);
+
+}
+
+
+/* ============================================================
+   QUICK FILTERS
+============================================================ */
+
+.quick-filter{
+
+    background:white;
+
+    padding:18px;
+
+    border-radius:16px;
+
+    border:1px solid var(--border);
+
+    box-shadow:var(--shadow);
+
+}
+
+
+/* ============================================================
+   SECTION TITLES
+============================================================ */
+
+.section-title{
+
+    font-size:28px;
+
+    font-weight:800;
+
+    color:var(--primary);
+
+    margin-bottom:16px;
+
+}
+
+
+/* ============================================================
+   DIVIDER
+============================================================ */
+
+.divider{
+
+    margin:18px 0;
+
+    border-top:1px solid var(--border);
+
+}
+
+
+/* ============================================================
+   BUTTON
+============================================================ */
+
+.stButton>button{
+
+    width:100%;
+
+    border-radius:12px;
+
+    height:44px;
+
+    border:none;
+
+    font-weight:600;
+
+    transition:.25s;
+
+}
+
+
+.stButton>button:hover{
+
+    transform:translateY(-2px);
+
+}
+/* ============================================================
+   JOB SECTION
+============================================================ */
+
+.job-section{
+
+    margin-top:20px;
+
+}
+
+.job-section-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:center;
+
+    margin-bottom:20px;
+
+}
+
+.job-section-title{
+
+    font-size:32px;
+
+    font-weight:800;
+
+    color:var(--primary);
+
+}
+
+.job-section-subtitle{
+
+    color:var(--text-light);
+
+    font-size:14px;
+
+}
+
+
+/* ============================================================
+   JOB CARD
+============================================================ */
+
+.job-card{
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    border-radius:18px;
+
+    padding:22px;
+
+    margin-bottom:20px;
+
+    box-shadow:var(--shadow);
+
+    transition:all .30s ease;
+
+}
+
+.job-card:hover{
+
+    transform:translateY(-6px);
+
+    box-shadow:0 20px 45px rgba(0,0,0,.12);
+
+}
+
+
+/* ============================================================
+   JOB HEADER
+============================================================ */
+
+.job-header{
+
+    display:flex;
+
+    justify-content:space-between;
+
+    align-items:flex-start;
+
+}
+
+.job-left{
+
+    display:flex;
+
+    gap:18px;
+
+}
+
+.job-right{
+
+    text-align:right;
+
+}
+
+
+/* ============================================================
+   COMPANY LOGO
+============================================================ */
+
+.company-logo{
+
+    width:72px;
+
+    height:72px;
+
+    border-radius:16px;
+
+    background:#F5F7FB;
+
+    border:1px solid var(--border);
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    overflow:hidden;
+
+}
+
+.company-logo img{
+
+    width:56px;
+
+    height:56px;
+
+    object-fit:contain;
+
+}
+
+
+/* ============================================================
+   JOB TITLE
+============================================================ */
+
+.job-title{
+
+    font-size:24px;
+
+    font-weight:700;
+
+    color:var(--primary);
+
+    margin-bottom:8px;
+
+}
+
+.job-title:hover{
+
+    color:var(--secondary);
+
+}
+
+
+/* ============================================================
+   COMPANY NAME
+============================================================ */
+
+.company-name{
+
+    font-size:17px;
+
+    font-weight:600;
+
+    color:#444;
+
+}
+
+
+/* ============================================================
+   LOCATION
+============================================================ */
+
+.job-location{
+
+    color:var(--text-light);
+
+    font-size:14px;
+
+    margin-top:6px;
+
+}
+
+
+/* ============================================================
+   POSTED DATE
+============================================================ */
+
+.posted-date{
+
+    color:var(--text-light);
+
+    font-size:13px;
+
+}
+
+
+/* ============================================================
+   SALARY
+============================================================ */
+
+.salary{
+
+    color:var(--success);
+
+    font-weight:700;
+
+    margin-top:8px;
+
+}
+
+
+/* ============================================================
+   SKILLS
+============================================================ */
+
+.skill-container{
+
+    margin-top:16px;
+
+}
+
+.skill{
+
+    display:inline-block;
+
+    background:#EAF3FF;
+
+    color:#1565C0;
+
+    border-radius:30px;
+
+    padding:6px 14px;
+
+    margin:4px;
+
+    font-size:13px;
+
+    font-weight:600;
+
+    transition:.25s;
+
+}
+
+.skill:hover{
+
+    background:#1976D2;
+
+    color:white;
+
+}
+
+
+/* ============================================================
+   BADGES
+============================================================ */
+
+.badge{
+
+    display:inline-block;
+
+    padding:5px 12px;
+
+    border-radius:25px;
+
+    font-size:12px;
+
+    font-weight:700;
+
+    margin-right:8px;
+
+}
+
+.badge-remote{
+
+    background:#E3F2FD;
+
+    color:#1565C0;
+
+}
+
+.badge-hybrid{
+
+    background:#FFF3E0;
+
+    color:#EF6C00;
+
+}
+
+.badge-onsite{
+
+    background:#E8F5E9;
+
+    color:#2E7D32;
+
+}
+
+.badge-fulltime{
+
+    background:#E8F5E9;
+
+    color:#2E7D32;
+
+}
+
+.badge-contract{
+
+    background:#FCE4EC;
+
+    color:#C2185B;
+
+}
+
+.badge-internship{
+
+    background:#FFF8E1;
+
+    color:#F9A825;
+
+}
+
+
+/* ============================================================
+   APPLY BUTTON
+============================================================ */
+
+.apply-btn{
+
+    background:var(--primary);
+
+    color:white;
+
+    padding:12px 24px;
+
+    border-radius:10px;
+
+    border:none;
+
+    font-weight:700;
+
+    transition:.25s;
+
+}
+
+.apply-btn:hover{
+
+    background:var(--primary-dark);
+
+}
+
+
+/* ============================================================
+   DETAILS BUTTON
+============================================================ */
+
+.details-btn{
+
+    background:white;
+
+    color:var(--primary);
+
+    border:1px solid var(--primary);
+
+    padding:12px 24px;
+
+    border-radius:10px;
+
+    font-weight:700;
+
+}
+
+.details-btn:hover{
+
+    background:var(--primary);
+
+    color:white;
+
+}
+
+
+/* ============================================================
+   SAVE BUTTON
+============================================================ */
+
+.save-btn{
+
+    background:#FFF8E1;
+
+    color:#F9A825;
+
+    border:none;
+
+    padding:12px 22px;
+
+    border-radius:10px;
+
+    font-weight:700;
+
+}
+
+.save-btn:hover{
+
+    background:#F9A825;
+
+    color:white;
+
+}
+
+
+/* ============================================================
+   BUTTON GROUP
+============================================================ */
+
+.job-buttons{
+
+    display:flex;
+
+    gap:14px;
+
+    margin-top:20px;
+
+}
+
+
+/* ============================================================
+   SEARCH FILTER PANEL
+============================================================ */
+
+.filter-panel{
+
+    background:white;
+
+    border-radius:18px;
+
+    padding:20px;
+
+    margin-bottom:20px;
+
+    box-shadow:var(--shadow);
+
+    border:1px solid var(--border);
+
+}
+
+.filter-title{
+
+    font-size:24px;
+
+    font-weight:700;
+
+    color:var(--primary);
+
+    margin-bottom:18px;
+
+}
+
+
+/* ============================================================
+   SELECTBOX
+============================================================ */
+
+.stSelectbox{
+
+    margin-bottom:12px;
+
+}
+
+
+/* ============================================================
+   CHECKBOX
+============================================================ */
+
+.stCheckbox{
+
+    margin-bottom:8px;
+
+}
+
+
+/* ============================================================
+   PAGINATION
+============================================================ */
+
+.pagination{
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    gap:10px;
+
+    margin:30px 0;
+
+}
+
+.page-number{
+
+    width:38px;
+
+    height:38px;
+
+    border-radius:10px;
+
+    background:white;
+
+    border:1px solid var(--border);
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    cursor:pointer;
+
+    transition:.25s;
+
+}
+
+.page-number:hover{
+
+    background:var(--primary);
+
+    color:white;
+
+}
+
+.page-active{
+
+    background:var(--primary);
+
+    color:white;
+
+}
+
+
+/* ============================================================
+   COMPANY TAG
+============================================================ */
+
+.company-tag{
+
+    background:#E8F5E9;
+
+    color:#2E7D32;
+
+    padding:5px 12px;
+
+    border-radius:25px;
+
+    font-size:12px;
+
+    font-weight:700;
+
+}
+
+
+/* ============================================================
+   VERIFIED JOB
+============================================================ */
+
+.verified-job{
+
+    color:var(--success);
+
+    font-size:13px;
+
+    font-weight:600;
+
+}
+
+
+/* ============================================================
+   FEATURED JOB
+============================================================ */
+
+.featured-job{
+
+    border-left:6px solid #FFC107;
+
+}
+
+
+/* ============================================================
+   LOADING
+============================================================ */
+
+.loading-card{
+
+    background:white;
+
+    border-radius:18px;
+
+    height:180px;
+
+    animation:pulse 1.2s infinite;
+
+}
+
+@keyframes pulse{
+
+    0%{
+
+        opacity:.55;
+
+    }
+
+    50%{
+
+        opacity:1;
+
+    }
+
+    100%{
+
+        opacity:.55;
+
+    }
+
+}

@@ -53,7 +53,8 @@ st.set_page_config(
 # LOAD CSS
 # =========================================================
 
-load_css("styles/style.css")
+#load_css("styles/style.css")
+load_css("assets/css/style.css")
 
 # =========================================================
 # HIDE STREAMLIT MENU

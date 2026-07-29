@@ -1,225 +1,1052 @@
 """
-services/sync_service.py
-
-Master synchronization service.
-
-Workflow
-
-1. Fetch jobs from all aggregators
-2. Normalize jobs
-3. Batch insert into SQLite
-4. Log synchronization
+=========================================================
+VisionBoard Career Portal
+Job Synchronization Service
+=========================================================
+Fetches jobs from all aggregators,
+normalizes data,
+filters,
+ranks,
+and saves into SQLite.
+=========================================================
 """
 
+import traceback
 from datetime import datetime
 
-from database.db_service import insert_jobs
-from services.filters.job_filter import is_relevant_job
+from database.db_service import (
+    insert_jobs,
+    create_indexes,
+)
+from services.company.resolver import (
+    normalize_company,
+    sort_by_company_priority,
+)
 
-# ===========================================================
+from services.ranking import rank_jobs
+from services.ranking import rank_jobs
+
+# =========================================================
 # Aggregators
-# ===========================================================
+# =========================================================
 
-from services.aggregators.adzuna import fetch_adzuna_jobs
-from services.aggregators.arbeitnow import fetch_arbeitnow_jobs
-from services.aggregators.remotive import fetch_remotive_jobs
-from services.aggregators.remoteok import fetch_remoteok_jobs
-from services.aggregators.greenhouse import fetch_greenhouse_jobs
-from services.aggregators.themuse import fetch_themuse_jobs
-from services.aggregators.usajobs import fetch_usajobs
-from services.aggregators.lever import fetch_lever_jobs
+from services.aggregators.adzuna import fetch_jobs as fetch_adzuna
+from services.aggregators.arbeitnow import fetch_jobs as fetch_arbeitnow
+from services.aggregators.greenhouse import fetch_jobs as fetch_greenhouse
+from services.aggregators.lever import fetch_jobs as fetch_lever
+from services.aggregators.remoteok import fetch_jobs as fetch_remoteok
+from services.aggregators.remotive import fetch_jobs as fetch_remotive
+from services.aggregators.themuse import fetch_jobs as fetch_themuse
+from services.aggregators.usajobs import fetch_jobs as fetch_usajobs
 
-# ===========================================================
+# =========================================================
 # Normalizers
-# ===========================================================
+# =========================================================
 
 from services.normalizers.adzuna import normalize as normalize_adzuna
 from services.normalizers.arbeitnow import normalize as normalize_arbeitnow
-from services.normalizers.remotive import normalize as normalize_remotive
+from services.normalizers.greenhouse import normalize as normalize_greenhouse
+from services.normalizers.lever import normalize as normalize_lever
 from services.normalizers.remoteok import normalize as normalize_remoteok
-from services.normalizers.greenhouse import (normalize_greenhouse_job)
+from services.normalizers.remotive import normalize as normalize_remotive
 from services.normalizers.themuse import normalize as normalize_themuse
 from services.normalizers.usajobs import normalize as normalize_usajobs
-from services.normalizers.lever import normalize as normalize_lever
 
 
-# ===========================================================
-# Generic Processor
-# ===========================================================
+# =========================================================
+# Preferred Companies
+# =========================================================
 
-def process_source(
-    source_name,
-    fetch_function,
-    normalize_function
-):
+PREFERRED_COMPANIES = [
+
+    "IBM",
+
+    "MICROSOFT",
+
+    "GOOGLE",
+
+    "AMAZON",
+
+    "APPLE",
+
+    "META",
+
+    "NETFLIX",
+
+    "ACCENTURE",
+
+    "COGNIZANT",
+
+    "CAPGEMINI",
+
+    "EY",
+
+    "ERNST & YOUNG",
+
+    "DELOITTE",
+
+    "KPMG",
+
+    "PWC",
+
+    "UST",
+
+    "ORACLE",
+
+    "CISCO",
+
+    "WIPRO",
+
+    "INFOSYS",
+
+    "TCS",
+
+    "HCL",
+
+    "TECH MAHINDRA",
+
+    "ALLIANZ",
+
+    "SAP",
+
+    "ADOBE",
+
+    "NVIDIA",
+
+]
+
+
+# =========================================================
+# Aggregator Registry
+# =========================================================
+
+AGGREGATORS = [
+
+    {
+        "name": "Adzuna",
+        "fetch": fetch_adzuna,
+        "normalize": normalize_adzuna,
+    },
+
+    {
+        "name": "ArbeitNow",
+        "fetch": fetch_arbeitnow,
+        "normalize": normalize_arbeitnow,
+    },
+
+    {
+        "name": "Greenhouse",
+        "fetch": fetch_greenhouse,
+        "normalize": normalize_greenhouse,
+    },
+
+    {
+        "name": "Lever",
+        "fetch": fetch_lever,
+        "normalize": normalize_lever,
+    },
+
+    {
+        "name": "RemoteOK",
+        "fetch": fetch_remoteok,
+        "normalize": normalize_remoteok,
+    },
+
+    {
+        "name": "Remotive",
+        "fetch": fetch_remotive,
+        "normalize": normalize_remotive,
+    },
+
+    {
+        "name": "TheMuse",
+        "fetch": fetch_themuse,
+        "normalize": normalize_themuse,
+    },
+
+    {
+        "name": "USAJobs",
+        "fetch": fetch_usajobs,
+        "normalize": normalize_usajobs,
+    },
+
+]
+
+
+# =========================================================
+# Company Name Standardization
+# =========================================================
+
+COMPANY_ALIASES = {
+
+    "IBM INDIA": "IBM",
+    "IBM INDIA PVT LTD": "IBM",
+    "IBM GLOBAL": "IBM",
+
+    "ERNST & YOUNG": "EY",
+    "EY GDS": "EY",
+
+    "COGNIZANT TECHNOLOGY SOLUTIONS": "COGNIZANT",
+
+    "CAPGEMINI INDIA": "CAPGEMINI",
+
+    "TECH MAHINDRA LIMITED": "TECH MAHINDRA",
+
+    "MICROSOFT INDIA": "MICROSOFT",
+
+    "GOOGLE INDIA": "GOOGLE",
+
+    "AMAZON DEVELOPMENT CENTER": "AMAZON",
+
+    "WIPRO LIMITED": "WIPRO",
+
+    "TATA CONSULTANCY SERVICES": "TCS",
+
+    "INFOSYS LIMITED": "INFOSYS",
+
+    "HCL TECHNOLOGIES": "HCL",
+
+}
+
+
+def normalize_company_name(company):
+
+    if not company:
+        return "Unknown"
+
+    company = company.strip().upper()
+
+    for alias, canonical in COMPANY_ALIASES.items():
+
+        if alias in company:
+            return canonical
+
+    return company.title()
+
+
+# =========================================================
+# Logging Helper
+# =========================================================
+
+def log(message):
+
+    print(
+        f"[{datetime.now().strftime('%H:%M:%S')}] {message}"
+    )
+# =========================================================
+# Validate Job
+# =========================================================
+
+def is_valid_job(job):
     """
-    Fetch, normalize and insert jobs from one source.
+    Basic validation to ensure only useful jobs
+    are inserted into the database.
     """
 
-    print("\n" + "=" * 70)
-    print(f"{source_name.upper()} SYNCHRONIZATION")
-    print("=" * 70)
+    if not job:
+        return False
 
-    start_time = datetime.now()
+    required = [
+        "job_id",
+        "title",
+        "company",
+        "apply_url",
+    ]
 
-    raw_jobs = fetch_function()
+    for field in required:
 
-    print(f"Fetched {len(raw_jobs)} jobs.")
+        value = str(job.get(field, "")).strip()
 
-    batch_jobs = []
+        if value == "":
+            return False
 
-    processed = 0
-    failed = 0
-
-    for job in raw_jobs:
-
-        try:
-
-            normalized = normalize_function(job)
-
-            if normalized:
-
-                batch_jobs.append(normalized)
-
-                processed += 1
-
-        except Exception as ex:
-
-            failed += 1
-
-            print(ex)
-
-    if batch_jobs:
-
-        insert_jobs(batch_jobs)
-
-    duration = (
-        datetime.now() - start_time
-    ).total_seconds()
-
-    print("-" * 70)
-    print(f"Raw Jobs      : {len(raw_jobs)}")
-    print(f"Processed     : {processed}")
-    print(f"Inserted      : {len(batch_jobs)}")
-    print(f"Failed        : {failed}")
-    print(f"Execution     : {duration:.2f} sec")
-    print("-" * 70)
-
-    return len(batch_jobs)
+    return True
 
 
-# ===========================================================
-# Master Synchronization
-# ===========================================================
+# =========================================================
+# Clean Job
+# =========================================================
 
-def sync_all_jobs():
+def clean_job(job):
+    """
+    Cleans and standardizes a normalized job.
+    """
 
-    print("\n")
-    print("=" * 70)
-    print("VISIONBOARD JOB PORTAL")
-    print("MASTER SYNCHRONIZATION")
-    print("=" * 70)
-
-    total = 0
-
-    # -------------------------------------------------------
-    # Adzuna
-    # -------------------------------------------------------
-
-    total += process_source(
-        "Adzuna",
-        fetch_adzuna_jobs,
-        normalize_adzuna
+    job["company"] = normalize_company_name(
+        job.get("company", "")
     )
 
-    # -------------------------------------------------------
-    # Arbeitnow
-    # -------------------------------------------------------
+    job["title"] = str(
+        job.get("title", "")
+    ).strip()
 
-    total += process_source(
-        "Arbeitnow",
-        fetch_arbeitnow_jobs,
-        normalize_arbeitnow
+    job["location"] = str(
+        job.get("location", "")
+    ).strip()
+
+    job["country"] = str(
+        job.get("country", "")
+    ).strip()
+
+    job["skills"] = str(
+        job.get("skills", "")
+    ).strip()
+
+    job["salary"] = str(
+        job.get("salary", "")
+    ).strip()
+
+    job["employment_type"] = str(
+        job.get("employment_type", "")
+    ).strip()
+
+    job["description"] = str(
+        job.get("description", "")
+    ).strip()
+
+    return job
+
+
+# =========================================================
+# Execute One Aggregator
+# =========================================================
+
+def run_aggregator(config):
+    """
+    Fetches and normalizes jobs from one aggregator.
+    """
+
+    name = config["name"]
+
+    fetch = config["fetch"]
+
+    normalize = config["normalize"]
+
+    jobs = []
+
+    try:
+
+        log(f"Fetching {name}...")
+
+        raw_jobs = fetch()
+
+        if raw_jobs is None:
+
+            log(f"{name} returned None.")
+
+            return []
+
+        log(f"{name}: {len(raw_jobs)} jobs fetched.")
+
+        for raw in raw_jobs:
+
+            try:
+
+                job = normalize(raw)
+
+                if not is_valid_job(job):
+
+                    continue
+
+                job = clean_job(job)
+
+                jobs.append(job)
+
+            except Exception:
+
+                traceback.print_exc()
+
+        log(f"{name}: {len(jobs)} jobs normalized.")
+
+        return jobs
+
+    except Exception:
+
+        traceback.print_exc()
+
+        log(f"{name}: FAILED")
+
+        return []
+
+
+# =========================================================
+# Fetch All Aggregators
+# =========================================================
+
+def fetch_all_jobs():
+    """
+    Executes all aggregators and combines the results.
+    """
+
+    all_jobs = []
+
+    total_sources = len(AGGREGATORS)
+
+    log("=" * 60)
+
+    log(f"Running {total_sources} aggregators...")
+
+    log("=" * 60)
+
+    for config in AGGREGATORS:
+
+        jobs = run_aggregator(config)
+
+        all_jobs.extend(jobs)
+
+        log(
+            f"Current Total Jobs : {len(all_jobs)}"
+        )
+
+    log("=" * 60)
+
+    log(f"Total Jobs Collected : {len(all_jobs)}")
+
+    log("=" * 60)
+
+    return all_jobs
+# =========================================================
+# Remove Duplicates
+# =========================================================
+
+def remove_duplicates(jobs):
+    """
+    Remove duplicate jobs based on
+    Title + Company + Location.
+    """
+
+    unique = {}
+
+    for job in jobs:
+
+        key = (
+            job.get("title", "").strip().lower(),
+            job.get("company", "").strip().lower(),
+            job.get("location", "").strip().lower(),
+        )
+
+        unique[key] = job
+
+    return list(unique.values())
+
+
+
+# =========================================================
+# Quality Filter
+# =========================================================
+
+def filter_quality_jobs(jobs):
+
+    filtered = []
+
+    for job in jobs:
+
+        if not job.get("title"):
+            continue
+
+        if not job.get("company"):
+            continue
+
+        if not job.get("apply_url"):
+            continue
+
+        if len(job.get("title", "")) < 3:
+            continue
+
+        filtered.append(job)
+
+    return filtered
+
+
+# =========================================================
+# Fortune Company Priority
+# =========================================================
+
+def apply_company_priority(jobs):
+    """
+    Gives preferred companies the highest priority.
+    """
+
+    preferred = []
+
+    others = []
+
+    for job in jobs:
+
+        company = str(
+            job.get("company", "")
+        ).upper()
+
+        if company in PREFERRED_COMPANIES:
+
+            job["priority"] = 100
+
+            preferred.append(job)
+
+        else:
+
+            job["priority"] = 10
+
+            others.append(job)
+
+    log(
+        f"Preferred Companies : {len(preferred)}"
     )
 
-    # -------------------------------------------------------
-    # Remotive
-    # -------------------------------------------------------
+    return preferred + others
 
-    total += process_source(
-        "Remotive",
-        fetch_remotive_jobs,
-        normalize_remotive
-    )
 
-    # -------------------------------------------------------
-    # RemoteOK
-    # -------------------------------------------------------
+# =========================================================
+# India Priority
+# =========================================================
 
-    total += process_source(
-        "RemoteOK",
-        fetch_remoteok_jobs,
-        normalize_remoteok
-    )
+INDIA_KEYWORDS = [
 
-    # -------------------------------------------------------
-    # Greenhouse
-    # -------------------------------------------------------
+    "india",
 
-    total += process_source(
-        "Greenhouse",
-        fetch_greenhouse_jobs,
-        normalize_greenhouse_job
-    )
-    # -------------------------------------------------------
-    # Lever
-    # -------------------------------------------------------
+    "bangalore",
 
-    #total += process_source(
-    #    "Lever",
-    #    fetch_lever_jobs,
-    #    normalize_lever
-    #)
-    # -------------------------------------------------------
-    # The Muse
-    # -------------------------------------------------------
+    "bengaluru",
 
-    #try:
+    "hyderabad",
 
-    #    total += process_source(
-    #        "TheMuse",
-    #        fetch_themuse_jobs,
-    #        normalize_themuse
-    #    )
+    "pune",
 
-    #except Exception as ex:
+    "chennai",
 
-    #    print(f"TheMuse skipped : {ex}")
+    "gurgaon",
 
-    # -------------------------------------------------------
-    # USAJobs
-    # -------------------------------------------------------
+    "gurugram",
 
-    #try:
+    "noida",
 
-     #   total += process_source(
-    #        "USAJobs",
-    #        fetch_usajobs,
-     #       normalize_usajobs
-     #   )
+    "kochi",
 
-    #except Exception as ex:
+    "mumbai",
 
-     #   print(f"USAJobs skipped : {ex}")
+    "delhi",
 
-    print("\n")
+]
+
+
+def prioritize_india_jobs(jobs):
+
+    india = []
+
+    world = []
+
+    for job in jobs:
+
+        text = (
+
+            str(job.get("country", "")) +
+
+            " " +
+
+            str(job.get("location", ""))
+
+        ).lower()
+
+        if any(city in text for city in INDIA_KEYWORDS):
+
+            india.append(job)
+
+        else:
+
+            world.append(job)
+
+    return india + world
+
+
+# =========================================================
+# Processing Pipeline
+# =========================================================
+
+def process_jobs(jobs):
+    """
+    Complete processing pipeline.
+    """
+
+    print(f"Processing {len(jobs)} jobs...")
+
+    # Normalize company names
+    jobs = [normalize_company(job) for job in jobs]
+
+    # Remove duplicates
+    jobs = remove_duplicates(jobs)
+
+    # Remove low quality jobs
+    jobs = filter_quality_jobs(jobs)
+
+    # India first
+    jobs = prioritize_india_jobs(jobs)
+
+    # Preferred companies first
+    jobs = sort_by_company_priority(jobs)
+
+    # Final ranking
+    jobs = rank_jobs(jobs)
+
+    print(f"Remaining Jobs: {len(jobs)}")
+
+    return jobs
+
+# ---------------------------------------
+# Remove Low Quality Jobs
+# ---------------------------------------
+
+def filter_quality_jobs(jobs):
+
+    filtered = []
+
+    for job in jobs:
+
+        if not job.get("title"):
+            continue
+
+        if not job.get("company"):
+            continue
+
+        if not job.get("apply_url"):
+            continue
+
+        if len(job.get("title", "")) < 3:
+            continue
+
+        filtered.append(job)
+
+    return filtered
+
+    # ---------------------------------------
+    # India First
+    # ---------------------------------------
+
+    jobs = prioritize_india_jobs(jobs)
+
+    # ---------------------------------------
+    # Preferred Companies First
+    # ---------------------------------------
+
+    jobs = sort_by_company_priority(jobs)
+
+    # ---------------------------------------
+    # Final Ranking
+    # ---------------------------------------
+
+    jobs = rank_jobs(jobs)
+
+    print(f"Remaining Jobs : {len(jobs)}")
+
+    return jobs
+# =========================================================
+# Save Jobs
+# =========================================================
+
+def save_jobs(jobs):
+    """
+    Saves processed jobs into the database.
+    """
+
+    if not jobs:
+
+        log("No jobs to save.")
+
+        return 0
+
+    try:
+
+        insert_jobs(jobs)
+
+        create_indexes()
+
+        log(f"Successfully saved {len(jobs)} jobs.")
+
+        return len(jobs)
+
+    except Exception:
+
+        traceback.print_exc()
+
+        log("Database insert failed.")
+
+        return 0
+
+
+# =========================================================
+# Synchronization Summary
+# =========================================================
+
+def print_summary(raw_count, final_count):
+
+    print()
+
     print("=" * 70)
-    print(f"TOTAL JOBS SYNCHRONIZED : {total}")
+    print(" VisionBoard Career Portal - Synchronization Summary")
     print("=" * 70)
 
-    return total
+    print(f"Raw Jobs Retrieved      : {raw_count}")
+    print(f"Final Jobs Saved        : {final_count}")
+    print(f"Duplicates Removed      : {raw_count - final_count}")
+    print(f"Completed At            : {datetime.now()}")
 
+    print("=" * 70)
+    print()
+
+
+# =========================================================
+# Main Synchronization Pipeline
+# =========================================================
+
+def sync_jobs():
+    """
+    Main synchronization workflow.
+    """
+
+    log("=" * 70)
+    log("Starting VisionBoard Job Synchronization")
+    log("=" * 70)
+
+    # -----------------------------------------
+    # Fetch Jobs
+    # -----------------------------------------
+
+    jobs = fetch_all_jobs()
+
+    raw_count = len(jobs)
+
+    if raw_count == 0:
+
+        log("No jobs received from any aggregator.")
+
+        return
+
+    # -----------------------------------------
+    # Process Jobs
+    # -----------------------------------------
+
+    jobs = process_jobs(jobs)
+
+    final_count = len(jobs)
+
+    # -----------------------------------------
+    # Save to Database
+    # -----------------------------------------
+
+    saved = save_jobs(jobs)
+
+    # -----------------------------------------
+    # Summary
+    # -----------------------------------------
+
+    print_summary(raw_count, saved)
+
+    log("Synchronization Completed Successfully.")
+
+
+# =========================================================
+# Run from Command Line
+# =========================================================
 
 if __name__ == "__main__":
 
-    sync_all_jobs()
+    sync_jobs()
+# =========================================================
+# Sync Statistics
+# =========================================================
+
+SYNC_STATS = {
+
+    "aggregators": 0,
+
+    "raw_jobs": 0,
+
+    "processed_jobs": 0,
+
+    "saved_jobs": 0,
+
+    "failed_aggregators": [],
+
+    "started": None,
+
+    "completed": None,
+
+}
+
+
+# =========================================================
+# Reset Statistics
+# =========================================================
+
+def reset_statistics():
+
+    SYNC_STATS["aggregators"] = 0
+
+    SYNC_STATS["raw_jobs"] = 0
+
+    SYNC_STATS["processed_jobs"] = 0
+
+    SYNC_STATS["saved_jobs"] = 0
+
+    SYNC_STATS["failed_aggregators"] = []
+
+    SYNC_STATS["started"] = datetime.now()
+
+    SYNC_STATS["completed"] = None
+
+
+# =========================================================
+# Print Statistics
+# =========================================================
+
+def print_statistics():
+
+    print()
+
+    print("=" * 70)
+
+    print(" VisionBoard Synchronization Statistics")
+
+    print("=" * 70)
+
+    print(
+        f"Started              : {SYNC_STATS['started']}"
+    )
+
+    print(
+        f"Completed            : {SYNC_STATS['completed']}"
+    )
+
+    print(
+        f"Aggregators          : {SYNC_STATS['aggregators']}"
+    )
+
+    print(
+        f"Raw Jobs             : {SYNC_STATS['raw_jobs']}"
+    )
+
+    print(
+        f"Processed Jobs       : {SYNC_STATS['processed_jobs']}"
+    )
+
+    print(
+        f"Saved Jobs           : {SYNC_STATS['saved_jobs']}"
+    )
+
+    print(
+        f"Failed Sources       : "
+        f"{len(SYNC_STATS['failed_aggregators'])}"
+    )
+
+    if SYNC_STATS["failed_aggregators"]:
+
+        print()
+
+        print("Failed Aggregators:")
+
+        for item in SYNC_STATS["failed_aggregators"]:
+
+            print("  •", item)
+
+    print("=" * 70)
+
+    print()
+
+
+# =========================================================
+# Database Maintenance
+# =========================================================
+
+def database_maintenance():
+
+    log("Running database maintenance...")
+
+    create_indexes()
+
+    log("Database optimized.")
+
+
+# =========================================================
+# Update Statistics
+# =========================================================
+
+def update_statistics(
+    raw_jobs,
+    processed_jobs,
+    saved_jobs,
+):
+
+    SYNC_STATS["aggregators"] = len(AGGREGATORS)
+
+    SYNC_STATS["raw_jobs"] = raw_jobs
+
+    SYNC_STATS["processed_jobs"] = processed_jobs
+
+    SYNC_STATS["saved_jobs"] = saved_jobs
+
+    SYNC_STATS["completed"] = datetime.now()
+
+
+# =========================================================
+# Scheduler Entry Point
+# =========================================================
+
+def scheduled_sync():
+
+    log("=" * 70)
+
+    log("Scheduled Synchronization Started")
+
+    log("=" * 70)
+
+    reset_statistics()
+
+    jobs = fetch_all_jobs()
+
+    raw_jobs = len(jobs)
+
+    jobs = process_jobs(jobs)
+
+    processed_jobs = len(jobs)
+
+    saved_jobs = save_jobs(jobs)
+
+    database_maintenance()
+
+    update_statistics(
+
+        raw_jobs,
+
+        processed_jobs,
+
+        saved_jobs,
+
+    )
+
+    print_statistics()
+
+    log("Scheduled Synchronization Finished.")
+# =========================================================
+# Retry Helper
+# =========================================================
+
+import time
+
+
+def run_aggregator_with_retry(config, retries=2, delay=2):
+    """
+    Runs one aggregator with retry support.
+    """
+
+    for attempt in range(1, retries + 2):
+
+        try:
+
+            return run_aggregator(config)
+
+        except Exception:
+
+            traceback.print_exc()
+
+            log(
+                f"{config['name']} failed "
+                f"(Attempt {attempt}/{retries + 1})"
+            )
+
+            if attempt <= retries:
+
+                time.sleep(delay)
+
+    SYNC_STATS["failed_aggregators"].append(
+        config["name"]
+    )
+
+    return []
+
+
+# =========================================================
+# Health Report
+# =========================================================
+
+def print_health_report():
+
+    print()
+    print("=" * 70)
+    print(" Aggregator Health Report")
+    print("=" * 70)
+
+    total = len(AGGREGATORS)
+
+    failed = len(
+        SYNC_STATS["failed_aggregators"]
+    )
+
+    successful = total - failed
+
+    print(f"Total Aggregators : {total}")
+    print(f"Successful        : {successful}")
+    print(f"Failed            : {failed}")
+
+    if failed:
+
+        print()
+
+        for source in SYNC_STATS["failed_aggregators"]:
+
+            print("  ✖", source)
+
+    print("=" * 70)
+    print()
+
+
+# =========================================================
+# Safe Synchronization
+# =========================================================
+
+def safe_sync():
+
+    reset_statistics()
+
+    all_jobs = []
+
+    log("=" * 70)
+    log("Starting Safe Synchronization")
+    log("=" * 70)
+
+    for config in AGGREGATORS:
+
+        jobs = run_aggregator_with_retry(config)
+
+        all_jobs.extend(jobs)
+
+    raw_jobs = len(all_jobs)
+
+    processed_jobs = process_jobs(all_jobs)
+
+    saved_jobs = save_jobs(processed_jobs)
+
+    database_maintenance()
+
+    update_statistics(
+
+        raw_jobs,
+
+        len(processed_jobs),
+
+        saved_jobs,
+
+    )
+
+    print_statistics()
+
+    print_health_report()
+
+    log("Synchronization Finished Successfully.")
+
+
+# =========================================================
+# Application Entry Point
+# =========================================================
+
+if __name__ == "__main__":
+
+    safe_sync()
