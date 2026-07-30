@@ -3,40 +3,26 @@
 VisionBoard Career Portal
 Main Application
 =========================================================
+Clean Client-Facing Version
+=========================================================
 """
 
 import streamlit as st
 
-# ---------------------------------------------------------
-# Utilities
-# ---------------------------------------------------------
-
 from utils.helpers import load_css
 
-# ---------------------------------------------------------
-# Components
-# ---------------------------------------------------------
-
 from components.header import show_header
-from components.sidebar import show_sidebar
 from components.footer import show_footer
 from components.filters import show_filters
 
-# ---------------------------------------------------------
-# Pages
-# ---------------------------------------------------------
-
 from pages.home import show_home
-
-# ---------------------------------------------------------
-# Database
-# ---------------------------------------------------------
 
 from database.db_service import (
     get_job_count,
     get_india_job_count,
     get_remote_job_count,
 )
+
 
 # =========================================================
 # PAGE CONFIG
@@ -49,53 +35,63 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+
 # =========================================================
 # LOAD CSS
 # =========================================================
 
-#load_css("styles/style.css")
 load_css("assets/css/style.css")
 
+
 # =========================================================
-# HIDE STREAMLIT MENU
+# STREAMLIT DEFAULT UI
 # =========================================================
 
 st.markdown(
     """
-<style>
+    <style>
 
-#MainMenu{
-    visibility:hidden;
-}
+    #MainMenu {
+        visibility: hidden;
+    }
 
-footer{
-    visibility:hidden;
-}
+    header {
+        visibility: hidden;
+    }
 
-header{
-    visibility:hidden;
-}
+    footer {
+        visibility: hidden;
+    }
 
-</style>
-""",
+    /* Remove default page padding */
+    .block-container {
+        padding-top: 1.5rem;
+        padding-bottom: 1rem;
+        max-width: 1450px;
+    }
+
+    /* Remove unnecessary sidebar */
+    [data-testid="stSidebar"] {
+        display: none;
+    }
+
+    </style>
+    """,
     unsafe_allow_html=True,
 )
+
 
 # =========================================================
 # METRICS
 # =========================================================
 
 metrics = {
-
     "total_jobs": get_job_count(),
-
     "india_jobs": get_india_job_count(),
-
     "remote_jobs": get_remote_job_count(),
-
     "last_sync": "6 Hours Ago",
-
 }
+
 
 # =========================================================
 # HEADER
@@ -103,41 +99,23 @@ metrics = {
 
 show_header()
 
-st.write("")
 
 # =========================================================
-# MAIN LAYOUT
+# SEARCH + FILTERS
 # =========================================================
 
-left, right = st.columns(
-    [1, 4],
-    gap="large",
-)
+filters = show_filters()
+
 
 # =========================================================
-# LEFT PANEL
+# MAIN JOB RESULTS
 # =========================================================
 
-with left:
+show_home(*filters)
 
-    show_sidebar(metrics)
-
-# =========================================================
-# RIGHT PANEL
-# =========================================================
-
-with right:
-
-    filters = show_filters()
-
-    st.write("")
-
-    show_home(*filters)
 
 # =========================================================
 # FOOTER
 # =========================================================
 
-st.divider()
-#show_home(*filters)
 show_footer()

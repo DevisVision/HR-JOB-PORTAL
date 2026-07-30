@@ -6,87 +6,69 @@ Professional Job Card
 """
 
 from pathlib import Path
-from datetime import datetime
-import base64
+import html
 import streamlit as st
 
 
 # =========================================================
-# COMPANY PRIORITY
+# COMPANY LOGOS
 # =========================================================
 
-FORTUNE_COMPANIES = {
-    "IBM",
-    "UST",
-    "EY",
-    "ERNST & YOUNG",
-    "KPMG",
-    "DELOITTE",
-    "ACCENTURE",
-    "COGNIZANT",
-    "WIPRO",
-    "CAPGEMINI",
-    "TECH MAHINDRA",
-    "CISCO",
-    "ALLIANZ",
-    "MICROSOFT",
-    "GOOGLE",
-    "AMAZON",
-    "ORACLE",
-    "TCS",
-    "HCL",
-    "INFOSYS",
-    "IBS"
+COMPANY_LOGOS = {
+    "IBM": "assets/company_logos/ibm.png",
+    "COGNIZANT": "assets/company_logos/cognizant.png",
+    "ACCENTURE": "assets/company_logos/accenture.png",
+    "UST": "assets/company_logos/ust.png",
+    "EY": "assets/company_logos/ey.png",
+    "KPMG": "assets/company_logos/kpmg.png",
+    "CAPGEMINI": "assets/company_logos/capgemini.png",
+    "CISCO": "assets/company_logos/cisco.png",
+    "WIPRO": "assets/company_logos/wipro.png",
+    "INFOSYS": "assets/company_logos/infosys.png",
+    "TCS": "assets/company_logos/tcs.png",
+    "HCL": "assets/company_logos/hcl.png",
+    "TECH MAHINDRA": "assets/company_logos/tech_mahindra.png",
+    "ALLIANZ": "assets/company_logos/allianz.png",
+    "MICROSOFT": "assets/company_logos/microsoft.png",
+    "GOOGLE": "assets/company_logos/google.png",
+    "AMAZON": "assets/company_logos/amazon.png",
+    "ORACLE": "assets/company_logos/oracle.png",
+    "DELOITTE": "assets/company_logos/deloitte.png",
+    "PWC": "assets/company_logos/pwc.png",
 }
 
 
+FORTUNE_COMPANIES = set(COMPANY_LOGOS.keys())
+
+
 # =========================================================
-# COMPANY LOGO
+# HELPERS
 # =========================================================
 
 def get_company_logo(company):
 
-    company = company.lower().replace(" ", "_")
+    company_upper = str(company).strip().upper()
 
-    logo = Path("assets/logos") / f"{company}.png"
+    for company_name, logo_path in COMPANY_LOGOS.items():
 
-    if logo.exists():
+        if company_name in company_upper:
 
-        with open(logo, "rb") as img:
+            path = Path(logo_path)
 
-            return base64.b64encode(img.read()).decode()
+            if path.exists():
+                return str(path)
 
     return None
 
 
-# =========================================================
-# RELATIVE DATE
-# =========================================================
+def get_company_initial(company):
 
-def format_posted_date(posted):
+    company = str(company).strip()
 
-    if not posted:
-        return "Recently"
+    if not company:
+        return "?"
 
-    try:
-
-        posted = str(posted)[:10]
-
-        post_date = datetime.strptime(posted, "%Y-%m-%d")
-
-        days = (datetime.now() - post_date).days
-
-        if days <= 0:
-            return "Today"
-
-        if days == 1:
-            return "Yesterday"
-
-        return f"{days} days ago"
-
-    except Exception:
-
-        return "Recently"
+    return company[0].upper()
 
 
 # =========================================================
@@ -95,232 +77,168 @@ def format_posted_date(posted):
 
 def show_job_card(job):
 
-    title = job.get("title", "Job Title")
+    title = str(
+        job.get("title", "Untitled Position")
+    ).strip()
 
-    company = job.get("company", "Unknown Company")
+    company = str(
+        job.get("company", "Company Not Mentioned")
+    ).strip()
 
-    location = job.get("location", "Location")
+    location = str(
+        job.get("location", "Location Not Mentioned")
+    ).strip()
 
-    country = job.get("country", "")
+    country = str(
+        job.get("country", "")
+    ).strip()
 
-    employment = job.get("employment_type", "Full Time")
+    employment = str(
+        job.get("employment_type", "")
+    ).strip()
 
-    salary = job.get("salary") or "Salary Not Mentioned"
+    salary = str(
+        job.get("salary", "")
+    ).strip()
 
-    description = job.get("description", "")
+    posted = str(
+        job.get("posted_date", "")
+    ).strip()
 
-    posted = format_posted_date(job.get("posted_date"))
+    description = str(
+        job.get("description", "")
+    ).strip()
 
-    apply_url = job.get("apply_url", "")
+    apply_url = str(
+        job.get("apply_url", "")
+    ).strip()
 
-    skills = job.get("skills", "")
+    logo_path = get_company_logo(company)
 
-    logo = get_company_logo(company)
+    initial = get_company_initial(company)
 
-    fortune = company.upper() in FORTUNE_COMPANIES
+    # =====================================================
+    # CARD
+    # =====================================================
 
-    unique_key = (
-        job.get("job_id")
-        or f"{title}_{company}_{location}"
-    )
+    with st.container(border=True):
 
-    badge = ""
-
-    if fortune:
-        badge = """
-        <span style="
-            background:#FFF8E1;
-            color:#F57C00;
-            padding:4px 10px;
-            border-radius:15px;
-            font-size:11px;
-            font-weight:700;">
-            ⭐ Fortune Company
-        </span>
-        """
-
-    logo_html = ""
-
-    if logo:
-
-        logo_html = f"""
-        <img
-            src="data:image/png;base64,{logo}"
-            style="
-                width:65px;
-                height:65px;
-                border-radius:12px;
-                object-fit:contain;
-                border:1px solid #E5E7EB;
-                padding:6px;
-                background:white;">
-        """
-
-    else:
-
-        logo_html = f"""
-        <div style="
-            width:65px;
-            height:65px;
-            border-radius:12px;
-            background:#0F4C81;
-            color:white;
-            display:flex;
-            justify-content:center;
-            align-items:center;
-            font-size:26px;
-            font-weight:bold;">
-            {company[:1].upper()}
-        </div>
-        """
-
-    skill_html = ""
-
-    if skills:
-
-        for skill in str(skills).split(",")[:6]:
-
-            skill_html += f"""
-            <span style="
-                background:#EAF3FF;
-                color:#1565C0;
-                padding:5px 12px;
-                margin:3px;
-                border-radius:20px;
-                font-size:12px;
-                display:inline-block;">
-                {skill.strip()}
-            </span>
-            """
-
-    st.markdown(
-        f"""
-<div style="
-background:white;
-border:1px solid #E5E7EB;
-border-radius:18px;
-padding:22px;
-margin-bottom:18px;
-box-shadow:0 6px 18px rgba(0,0,0,.06);">
-
-<div style="display:flex;gap:18px;">
-
-{logo_html}
-
-<div style="flex:1;">
-
-<div style="
-font-size:24px;
-font-weight:700;
-color:#0F4C81;">
-
-{title}
-
-</div>
-
-<div style="
-font-size:17px;
-font-weight:600;
-margin-top:4px;">
-
-🏢 {company}
-
-{badge}
-
-</div>
-
-<div style="margin-top:8px;color:#555;">
-
-📍 {location}
-
-{' | ' + country if country else ''}
-
-</div>
-
-<div style="margin-top:12px;">
-
-<span style="
-background:#EEF7EE;
-padding:5px 10px;
-border-radius:15px;
-font-size:12px;
-margin-right:6px;">
-
-💼 {employment}
-
-</span>
-
-<span style="
-background:#FFF4E5;
-padding:5px 10px;
-border-radius:15px;
-font-size:12px;
-margin-right:6px;">
-
-💰 {salary}
-
-</span>
-
-<span style="
-background:#F3F4F6;
-padding:5px 10px;
-border-radius:15px;
-font-size:12px;">
-
-🕒 {posted}
-
-</span>
-
-</div>
-
-<div style="margin-top:15px;">
-
-{skill_html}
-
-</div>
-
-</div>
-
-</div>
-
-</div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    col1, col2, col3 = st.columns([2.2, 1.4, 1])
-
-    with col1:
-
-        if apply_url:
-
-            st.link_button(
-                "🚀 Apply Now",
-                apply_url,
-                use_container_width=True,
-            )
-
-        else:
-
-            st.button(
-                "🚀 Apply",
-                disabled=True,
-                key=f"apply_{unique_key}",
-                use_container_width=True,
-            )
-
-    with col2:
-
-        with st.expander("📄 Job Description"):
-
-            st.write(description if description else "Description not available.")
-
-    with col3:
-
-        st.button(
-            "⭐ Save",
-            key=f"save_{unique_key}",
-            use_container_width=True,
+        logo_col, content_col, action_col = st.columns(
+            [1, 6, 1.5],
+            vertical_alignment="top",
         )
 
-    st.write("")
+        # =================================================
+        # COMPANY LOGO
+        # =================================================
+
+        with logo_col:
+
+            if logo_path:
+
+                st.image(
+                    logo_path,
+                    width=64,
+                )
+
+            else:
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        width:58px;
+                        height:58px;
+                        border-radius:12px;
+                        background:#0F4C81;
+                        color:white;
+                        display:flex;
+                        justify-content:center;
+                        align-items:center;
+                        font-size:24px;
+                        font-weight:700;
+                    ">
+                        {initial}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # =================================================
+        # JOB INFORMATION
+        # =================================================
+
+        with content_col:
+
+            st.markdown(
+                f"### {html.escape(title)}"
+            )
+
+            st.write(
+                f"🏢 **{company}**"
+            )
+
+            if any(
+                name in company.upper()
+                for name in FORTUNE_COMPANIES
+            ):
+
+                st.caption(
+                    "⭐ Preferred / Fortune Company"
+                )
+
+            location_text = location
+
+            if country:
+
+                if country.lower() not in location.lower():
+
+                    location_text += f" | {country}"
+
+            st.write(
+                f"📍 {location_text}"
+            )
+
+            if employment:
+
+                st.write(
+                    f"💼 {employment}"
+                )
+
+            if salary and salary.lower() not in {
+                "none",
+                "null",
+                "not mentioned",
+                "salary not mentioned",
+            }:
+
+                st.write(
+                    f"💰 {salary}"
+                )
+
+            if posted:
+
+                st.write(
+                    f"🕒 {posted}"
+                )
+
+            if description:
+
+                with st.expander(
+                    "📄 Job Description"
+                ):
+
+                    st.write(description)
+
+        # =================================================
+        # APPLY
+        # =================================================
+
+        with action_col:
+
+            if apply_url:
+
+                st.link_button(
+                    "Apply Now →",
+                    apply_url,
+                    use_container_width=True,
+                )

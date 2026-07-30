@@ -1101,3 +1101,158 @@ hr{
     }
 
 }
+/* =====================================================
+   SEARCH HEADER
+   ===================================================== */
+
+.vb-search-header {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 14px rgba(15, 76, 129, 0.06);
+}
+
+.vb-search-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0f4c81;
+}
+
+.vb-search-subtitle {
+    margin-top: 5px;
+    font-size: 14px;
+    color: #64748b;
+}
+
+.vb-search-example {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
+}
+
+.vb-filter-divider {
+    height: 1px;
+    background: #e2e8f0;
+    margin: 18px 0 24px 0;
+}
+/* =====================================================
+   RESULTS HEADER
+   ===================================================== */
+
+.vb-results-header {
+    padding: 8px 0 14px 0;
+}
+
+.vb-results-title {
+    font-size: 22px;
+    font-weight: 800;
+    color: #0F4C81;
+}
+
+.vb-results-subtitle {
+    margin-top: 4px;
+    font-size: 13px;
+    color: #64748B;
+}
+
+
+/* =====================================================
+   RESULT COUNT
+   ===================================================== */
+
+.vb-result-count {
+    background: #F1F7FD;
+    border: 1px solid #DCEAF7;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #475569;
+    font-size: 13px;
+}
+
+
+/* =====================================================
+   NO RESULTS
+   ===================================================== */
+
+.vb-no-results {
+    text-align: center;
+    padding: 60px 20px;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    background: #FFFFFF;
+    margin-top: 20px;
+}
+
+.vb-no-results-icon {
+    font-size: 40px;
+}
+
+.vb-no-results-title {
+    margin-top: 12px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #0F4C81;
+}
+
+.vb-no-results-text {
+    margin-top: 8px;
+    color: #64748B;
+}
+
+.vb-no-results-help {
+    margin-top: 8px;
+    font-size: 13px;
+    color: #94A3B8;
+}
+
+
+/* =====================================================
+   PAGE INFORMATION
+   ===================================================== */
+
+.vb-page-info {
+    text-align: center;
+    color: #64748B;
+    font-size: 13px;
+    margin: 12px 0 30px 0;
+}
+
+
+/* =====================================================
+   ABOUT
+   ===================================================== */
+
+.vb-about {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-top: 35px;
+}
+
+.vb-about-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0F4C81;
+    margin-bottom: 10px;
+}
+
+.vb-about-text {
+    color: #475569;
+    line-height: 1.7;
+    font-size: 13px;
+}
+
+
+/* =====================================================
+   SYNC INFO
+   ===================================================== */
+
+.vb-sync-info {
+    text-align: center;
+    color: #94A3B8;
+    font-size: 12px;
+    padding: 18px 0;
+}

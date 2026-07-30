@@ -3,7 +3,23 @@
 VisionBoard Career Portal
 Home Page
 =========================================================
-Professional Home Page
+Professional Job Results Page
+
+Responsibilities:
+    - Load jobs from database
+    - Primary search
+    - Location filtering
+    - Verified filtering
+    - Job ranking
+    - India-first ordering
+    - Preferred-company prioritization
+    - Remote / Abroad classification
+    - Pagination
+    - Job card display
+
+NOTE:
+    Footer is intentionally NOT included here.
+    app.py should call show_footer() once.
 =========================================================
 """
 
@@ -13,172 +29,824 @@ import streamlit as st
 from database.db_service import (
     search_jobs,
     get_jobs_paginated,
-    get_total_job_count,
 )
 
 from services.ranking import rank_jobs
-
 from components.job_card import show_job_card
 
 
 # =========================================================
-# HOME PAGE
+# CONFIGURATION
+# =========================================================
+
+PAGE_SIZE = 10
+
+MAX_JOBS_TO_LOAD = 5000
+
+PAGE_WINDOW = 5
+
+
+# =========================================================
+# PREFERRED COMPANIES
+# =========================================================
+
+PREFERRED_COMPANIES = [
+    "IBM",
+    "UST",
+    "EY",
+    "ERNST & YOUNG",
+    "ALLIANZ",
+    "CAPGEMINI",
+    "CISCO",
+    "KPMG",
+    "DELOITTE",
+    "PWC",
+    "PRICEWATERHOUSECOOPERS",
+    "WIPRO",
+    "COGNIZANT",
+    "ACCENTURE",
+    "TECH MAHINDRA",
+    "MICROSOFT",
+    "GOOGLE",
+    "AMAZON",
+    "ORACLE",
+    "INFOSYS",
+    "TCS",
+    "TATA CONSULTANCY SERVICES",
+    "HCL",
+    "HCLTECH",
+]
+
+
+# =========================================================
+# INDIA KEYWORDS
+# =========================================================
+
+INDIA_KEYWORDS = [
+    "india",
+    "bangalore",
+    "bengaluru",
+    "hyderabad",
+    "pune",
+    "mumbai",
+    "chennai",
+    "gurgaon",
+    "gurugram",
+    "noida",
+    "kochi",
+    "cochin",
+    "kolkata",
+    "ahmedabad",
+    "mysore",
+    "mysuru",
+    "trivandrum",
+    "thiruvananthapuram",
+    "delhi",
+    "new delhi",
+    "jaipur",
+    "indore",
+    "chandigarh",
+    "coimbatore",
+    "vadodara",
+    "surat",
+    "bhubaneswar",
+]
+
+
+# =========================================================
+# REMOTE KEYWORDS
+# =========================================================
+
+REMOTE_KEYWORDS = [
+    "remote",
+    "work from home",
+    "wfh",
+    "work-from-home",
+    "anywhere",
+    "worldwide",
+    "distributed",
+]
+
+
+# =========================================================
+# SAFE TEXT
+# =========================================================
+
+def safe_text(value):
+    """
+    Safely convert a database value to text.
+    """
+
+    if value is None:
+        return ""
+
+    return str(value).strip()
+
+
+# =========================================================
+# JOB CLASSIFICATION
+# =========================================================
+
+def is_india_job(job):
+    """
+    Identify India jobs using country and location.
+    """
+
+    country = safe_text(
+        job.get("country", "")
+    ).lower()
+
+    location = safe_text(
+        job.get("location", "")
+    ).lower()
+
+    combined = f"{country} {location}"
+
+    return any(
+        keyword in combined
+        for keyword in INDIA_KEYWORDS
+    )
+
+
+def is_remote_job(job):
+    """
+    Identify remote jobs from location,
+    country and description.
+    """
+
+    location = safe_text(
+        job.get("location", "")
+    ).lower()
+
+    country = safe_text(
+        job.get("country", "")
+    ).lower()
+
+    description = safe_text(
+        job.get("description", "")
+    ).lower()
+
+    combined = (
+        f"{location} "
+        f"{country} "
+        f"{description}"
+    )
+
+    return any(
+        keyword in combined
+        for keyword in REMOTE_KEYWORDS
+    )
+
+
+def is_preferred_company(job):
+    """
+    Identify jobs from the organization's
+    preferred company list.
+    """
+
+    company = safe_text(
+        job.get("company", "")
+    ).upper()
+
+    if not company:
+        return False
+
+    return any(
+        company_name in company
+        for company_name in PREFERRED_COMPANIES
+    )
+
+
+def is_verified_job(job):
+    """
+    Current verification rule.
+
+    A job is considered verified when:
+        - company exists
+        - apply URL exists
+        - source exists
+
+    If a real verified column is added to the DB later,
+    this function can be updated without changing the UI.
+    """
+
+    company = safe_text(
+        job.get("company", "")
+    )
+
+    apply_url = safe_text(
+        job.get("apply_url", "")
+    )
+
+    source = safe_text(
+        job.get("source", "")
+    )
+
+    return bool(
+        company
+        and apply_url
+        and source
+    )
+
+
+def is_abroad_job(job):
+    """
+    Identify jobs that are neither India nor remote.
+    """
+
+    return (
+        not is_india_job(job)
+        and not is_remote_job(job)
+    )
+
+
+# =========================================================
+# POSTED DATE SORTING
+# =========================================================
+
+def posted_date_key(job):
+    """
+    Return posted date safely for sorting.
+    """
+
+    return safe_text(
+        job.get("posted_date", "")
+    )
+
+
+# =========================================================
+# LOAD JOBS
+# =========================================================
+
+def load_jobs(search_text):
+    """
+    Load jobs from the existing database layer.
+
+    IMPORTANT:
+    The existing database logic is preserved.
+    """
+
+    with st.spinner(
+        "Loading latest opportunities..."
+    ):
+
+        try:
+
+            if search_text.strip():
+
+                jobs = search_jobs(
+                    keyword=search_text.strip(),
+                    limit=MAX_JOBS_TO_LOAD,
+                    offset=0,
+                )
+
+            else:
+
+                jobs = get_jobs_paginated(
+                    page=1,
+                    page_size=MAX_JOBS_TO_LOAD,
+                )
+
+        except Exception as error:
+
+            st.error(
+                "Unable to load jobs from the database."
+            )
+
+            st.caption(
+                str(error)
+            )
+
+            return []
+
+    if jobs is None:
+        return []
+
+    return list(jobs)
+
+
+# =========================================================
+# APPLY LOCATION FILTER
+# =========================================================
+
+def apply_location_filter(
+    jobs,
+    filter_value,
+):
+    """
+    Apply the main radio-button filter.
+
+    Supported values:
+        All Jobs
+        India
+        Remote
+        Abroad
+        Verified Jobs
+    """
+
+    if filter_value == "India":
+
+        return [
+            job
+            for job in jobs
+            if is_india_job(job)
+        ]
+
+    if filter_value == "Remote":
+
+        return [
+            job
+            for job in jobs
+            if is_remote_job(job)
+        ]
+
+    if filter_value == "Abroad":
+
+        return [
+            job
+            for job in jobs
+            if is_abroad_job(job)
+        ]
+
+    if filter_value == "Verified Jobs":
+
+        return [
+            job
+            for job in jobs
+            if is_verified_job(job)
+        ]
+
+    return jobs
+
+
+# =========================================================
+# PRIORITIZE JOBS
+# =========================================================
+
+def prioritize_jobs(jobs):
+    """
+    VisionBoard ordering:
+
+        1. India + Preferred Company
+        2. India
+        3. Remote + Preferred Company
+        4. Remote
+        5. Abroad + Preferred Company
+        6. Abroad
+
+    Latest jobs are shown first inside each group.
+    """
+
+    india_preferred = []
+    india_other = []
+
+    remote_preferred = []
+    remote_other = []
+
+    abroad_preferred = []
+    abroad_other = []
+
+    for job in jobs:
+
+        india = is_india_job(job)
+
+        remote = is_remote_job(job)
+
+        preferred = is_preferred_company(job)
+
+        if india:
+
+            if preferred:
+                india_preferred.append(job)
+
+            else:
+                india_other.append(job)
+
+        elif remote:
+
+            if preferred:
+                remote_preferred.append(job)
+
+            else:
+                remote_other.append(job)
+
+        else:
+
+            if preferred:
+                abroad_preferred.append(job)
+
+            else:
+                abroad_other.append(job)
+
+    groups = [
+        india_preferred,
+        india_other,
+        remote_preferred,
+        remote_other,
+        abroad_preferred,
+        abroad_other,
+    ]
+
+    for group in groups:
+
+        group.sort(
+            key=posted_date_key,
+            reverse=True,
+        )
+
+    return (
+        india_preferred
+        + india_other
+        + remote_preferred
+        + remote_other
+        + abroad_preferred
+        + abroad_other
+    )
+
+
+# =========================================================
+# TOP PAGINATION
+# =========================================================
+
+def show_top_pagination(
+    page,
+    total_pages,
+):
+    """
+    Compact pagination displayed beside
+    Latest Career Opportunities.
+    """
+
+    if total_pages <= 1:
+        return
+
+    start_page = max(
+        1,
+        page - 2,
+    )
+
+    end_page = min(
+        total_pages,
+        start_page + PAGE_WINDOW - 1,
+    )
+
+    if (
+        end_page - start_page
+        < PAGE_WINDOW - 1
+    ):
+
+        start_page = max(
+            1,
+            end_page - PAGE_WINDOW + 1,
+        )
+
+    page_count = (
+        end_page - start_page + 1
+    )
+
+    columns = st.columns(
+        page_count + 2
+    )
+
+    # -----------------------------------------------------
+    # Previous
+    # -----------------------------------------------------
+
+    with columns[0]:
+
+        if st.button(
+            "‹",
+            disabled=(
+                page == 1
+            ),
+            key="top_previous",
+            use_container_width=True,
+        ):
+
+            st.session_state.page = (
+                page - 1
+            )
+
+            st.rerun()
+
+    # -----------------------------------------------------
+    # Page Numbers
+    # -----------------------------------------------------
+
+    for index, page_number in enumerate(
+        range(
+            start_page,
+            end_page + 1,
+        ),
+        start=1,
+    ):
+
+        with columns[index]:
+
+            if st.button(
+                str(page_number),
+                key=f"top_page_{page_number}",
+                type=(
+                    "primary"
+                    if page_number == page
+                    else "secondary"
+                ),
+                use_container_width=True,
+            ):
+
+                st.session_state.page = (
+                    page_number
+                )
+
+                st.rerun()
+
+    # -----------------------------------------------------
+    # Next
+    # -----------------------------------------------------
+
+    with columns[-1]:
+
+        if st.button(
+            "›",
+            disabled=(
+                page == total_pages
+            ),
+            key="top_next",
+            use_container_width=True,
+        ):
+
+            st.session_state.page = (
+                page + 1
+            )
+
+            st.rerun()
+
+
+# =========================================================
+# BOTTOM PAGINATION
+# =========================================================
+
+def show_bottom_pagination(
+    page,
+    total_pages,
+):
+    """
+    Simple pagination at the bottom.
+    """
+
+    if total_pages <= 1:
+        return
+
+    st.divider()
+
+    left, center, right = st.columns(
+        [2, 4, 2]
+    )
+
+    with left:
+
+        if st.button(
+            "← Previous",
+            disabled=(
+                page == 1
+            ),
+            key="bottom_previous",
+            use_container_width=True,
+        ):
+
+            st.session_state.page = (
+                page - 1
+            )
+
+            st.rerun()
+
+    with center:
+
+        st.markdown(
+            f"""
+            <div style="
+                text-align:center;
+                padding-top:8px;
+                color:#64748B;
+                font-size:13px;
+            ">
+                Page <strong>{page}</strong>
+                of
+                <strong>{total_pages}</strong>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with right:
+
+        if st.button(
+            "Next →",
+            disabled=(
+                page == total_pages
+            ),
+            key="bottom_next",
+            use_container_width=True,
+        ):
+
+            st.session_state.page = (
+                page + 1
+            )
+
+            st.rerun()
+
+
+# =========================================================
+# SHOW HOME
 # =========================================================
 
 def show_home(
-    category,
-    keyword,
-    employment_type,
-    posted,
-    source,
-    sort_by,
+    search,
+    filter_value,
+    india_only,
+    remote_only,
+    abroad_only,
+    verified_only,
 ):
+    """
+    Main VisionBoard job-results page.
 
-    # -----------------------------------------------------
-    # Session State
-    # -----------------------------------------------------
+    The six parameters correspond to filters.py.
+    """
+
+    # =====================================================
+    # SESSION STATE
+    # =====================================================
 
     if "page" not in st.session_state:
 
         st.session_state.page = 1
 
-    PAGE_SIZE = 10
+    # =====================================================
+    # NORMALIZE VALUES
+    # =====================================================
 
-    # -----------------------------------------------------
-    # Reset Page when Search Changes
-    # -----------------------------------------------------
+    search = safe_text(search)
+
+    filter_value = safe_text(
+        filter_value
+    )
+
+    # =====================================================
+    # HANDLE QUICK FILTERS
+    # =====================================================
+
+    # The radio-button location filter remains the
+    # primary location filter.
+
+    # These quick-filter flags are also respected
+    # independently when selected.
+
+    effective_filter = filter_value
+
+    if india_only:
+
+        effective_filter = "India"
+
+    elif remote_only:
+
+        effective_filter = "Remote"
+
+    elif abroad_only:
+
+        effective_filter = "Abroad"
+
+    elif verified_only:
+
+        effective_filter = "Verified Jobs"
+
+    # =====================================================
+    # FILTER STATE
+    # =====================================================
 
     current_filter = (
-        category,
-        keyword,
-        employment_type,
-        posted,
-        source,
-        sort_by,
+        search,
+        effective_filter,
+        india_only,
+        remote_only,
+        abroad_only,
+        verified_only,
     )
 
     if (
-        "last_filter" not in st.session_state
-        or st.session_state.last_filter != current_filter
+        "last_home_filter"
+        not in st.session_state
+    ):
+
+        st.session_state.last_home_filter = (
+            current_filter
+        )
+
+    elif (
+        st.session_state.last_home_filter
+        != current_filter
     ):
 
         st.session_state.page = 1
 
-        st.session_state.last_filter = current_filter
+        st.session_state.last_home_filter = (
+            current_filter
+        )
 
-    page = st.session_state.page
+    # =====================================================
+    # LOAD JOBS
+    # =====================================================
 
-    offset = (page - 1) * PAGE_SIZE
+    jobs = load_jobs(
+        search
+    )
 
-    # -----------------------------------------------------
-    # Load Jobs
-    # -----------------------------------------------------
+    # =====================================================
+    # RANK JOBS
+    # =====================================================
 
-    with st.spinner("Loading latest opportunities..."):
+    if jobs:
 
-        if keyword.strip():
+        try:
 
-            jobs = search_jobs(
-
-                keyword=keyword,
-
-                category=category,
-
-                employment_type=employment_type,
-
-                source=source,
-
-                limit=1000,
-
-                offset=0,
-
+            jobs = rank_jobs(
+                jobs
             )
 
-        else:
+        except Exception:
 
-            jobs = get_jobs_paginated(
+            # Ranking should never stop
+            # the job portal.
+            pass
 
-                page=1,
+    # =====================================================
+    # LOCATION FILTER
+    # =====================================================
 
-                page_size=1000,
+    jobs = apply_location_filter(
+        jobs,
+        effective_filter,
+    )
 
-            )
+    # =====================================================
+    # PRIORITIZE
+    # =====================================================
 
-    # -----------------------------------------------------
-    # Ranking Engine
-    # -----------------------------------------------------
+    jobs = prioritize_jobs(
+        jobs
+    )
 
-    jobs = rank_jobs(jobs)
+    # =====================================================
+    # STATISTICS
+    # =====================================================
 
-    # -----------------------------------------------------
-    # Posted Filter
-    # -----------------------------------------------------
+    india_jobs = [
+        job
+        for job in jobs
+        if is_india_job(job)
+    ]
 
-    if posted != "Any Time":
+    remote_jobs = [
+        job
+        for job in jobs
+        if is_remote_job(job)
+    ]
 
-        if posted == "Today":
+    abroad_jobs = [
+        job
+        for job in jobs
+        if is_abroad_job(job)
+    ]
 
-            jobs = jobs[:50]
+    preferred_jobs = [
+        job
+        for job in jobs
+        if is_preferred_company(job)
+    ]
 
-        elif posted == "Last 7 Days":
+    verified_jobs = [
+        job
+        for job in jobs
+        if is_verified_job(job)
+    ]
 
-            jobs = jobs[:200]
+    total_jobs = len(
+        jobs
+    )
 
-    # -----------------------------------------------------
-    # Sort
-    # -----------------------------------------------------
-
-    if sort_by == "Company":
-
-        jobs = sorted(
-
-            jobs,
-
-            key=lambda x: str(
-                x.get("company", "")
-            ).lower(),
-
-        )
-
-    elif sort_by == "Latest":
-
-        jobs = sorted(
-
-            jobs,
-
-            key=lambda x: str(
-                x.get("posted_date", "")
-            ),
-
-            reverse=True,
-
-        )
-
-    elif sort_by == "Location":
-
-        jobs = sorted(
-
-            jobs,
-
-            key=lambda x: str(
-                x.get("location", "")
-            ).lower(),
-
-        )
-
-    # -----------------------------------------------------
-    # Total Jobs
-    # -----------------------------------------------------
-
-    total_jobs = len(jobs)
+    # =====================================================
+    # PAGINATION CALCULATION
+    # =====================================================
 
     total_pages = max(
-
         1,
-
-        math.ceil(total_jobs / PAGE_SIZE)
-
+        math.ceil(
+            total_jobs
+            / PAGE_SIZE
+        ),
     )
+
+    page = st.session_state.page
 
     if page > total_pages:
 
@@ -186,460 +854,242 @@ def show_home(
 
         st.session_state.page = page
 
-    start = (page - 1) * PAGE_SIZE
+    start = (
+        page - 1
+    ) * PAGE_SIZE
 
-    end = start + PAGE_SIZE
-
-    jobs_to_show = jobs[start:end]
-    # -----------------------------------------------------
-    # Categorize Jobs
-    # -----------------------------------------------------
-
-    INDIA_KEYWORDS = [
-        "india",
-        "bangalore",
-        "bengaluru",
-        "hyderabad",
-        "pune",
-        "mumbai",
-        "chennai",
-        "gurgaon",
-        "gurugram",
-        "noida",
-        "kochi",
-        "cochin",
-        "kolkata",
-        "ahmedabad",
-        "mysore",
-        "trivandrum",
-        "thiruvananthapuram",
-    ]
-
-    REMOTE_KEYWORDS = [
-        "remote",
-        "work from home",
-        "wfh",
-        "anywhere",
-    ]
-
-    FORTUNE_COMPANIES = [
-        "IBM",
-        "ACCENTURE",
-        "COGNIZANT",
-        "CAPGEMINI",
-        "EY",
-        "KPMG",
-        "DELOITTE",
-        "PWC",
-        "UST",
-        "MICROSOFT",
-        "GOOGLE",
-        "AMAZON",
-        "ORACLE",
-        "CISCO",
-        "ALLIANZ",
-        "WIPRO",
-        "INFOSYS",
-        "TCS",
-        "HCL",
-        "TECH MAHINDRA",
-    ]
-
-    india_jobs = []
-    fortune_jobs = []
-    remote_jobs = []
-    abroad_jobs = []
-
-    for job in jobs:
-
-        company = str(job.get("company", "")).upper()
-
-        location = (
-            str(job.get("country", "")) +
-            " " +
-            str(job.get("location", ""))
-        ).lower()
-
-        description = str(job.get("description", "")).lower()
-
-        # Fortune Companies
-        if any(c in company for c in FORTUNE_COMPANIES):
-
-            fortune_jobs.append(job)
-
-            continue
-
-        # India Jobs
-        if any(city in location for city in INDIA_KEYWORDS):
-
-            india_jobs.append(job)
-
-            continue
-
-        # Remote Jobs
-        if any(word in location for word in REMOTE_KEYWORDS):
-
-            remote_jobs.append(job)
-
-            continue
-
-        if any(word in description for word in REMOTE_KEYWORDS):
-
-            remote_jobs.append(job)
-
-            continue
-
-        # Abroad
-        abroad_jobs.append(job)
-
-    # -----------------------------------------------------
-    # Final Ordering
-    # -----------------------------------------------------
-
-    jobs = (
-        india_jobs +
-        fortune_jobs +
-        remote_jobs +
-        abroad_jobs
+    end = (
+        start
+        + PAGE_SIZE
     )
 
-    total_jobs = len(jobs)
+    jobs_to_show = jobs[
+        start:end
+    ]
 
-    total_pages = max(
-        1,
-        math.ceil(total_jobs / PAGE_SIZE)
+    # =====================================================
+    # TOP INFORMATION
+    # =====================================================
+
+    info1, info2, info3, info4 = st.columns(
+        4
     )
 
-    start = (page - 1) * PAGE_SIZE
-
-    end = start + PAGE_SIZE
-
-    jobs_to_show = jobs[start:end]
-
-    # -----------------------------------------------------
-    # Header
-    # -----------------------------------------------------
-
-    left, right = st.columns([4, 1])
-
-    with left:
-
-        st.markdown(
-            """
-## 💼 Latest Career Opportunities
-"""
-        )
+    with info1:
 
         st.caption(
-            f"""
-Showing **{len(jobs)}** verified opportunities from
-multiple trusted job portals.
-"""
+            f"🇮🇳 India  **{len(india_jobs)}**"
         )
 
-    with right:
+    with info2:
 
-        st.metric(
-            "Jobs Found",
-            len(jobs)
+        st.caption(
+            f"⭐ Preferred  **{len(preferred_jobs)}**"
         )
 
-    st.divider()
+    with info3:
 
-    # -----------------------------------------------------
-    # Statistics Row
-    # -----------------------------------------------------
-
-    c1, c2, c3, c4 = st.columns(4)
-
-    c1.metric(
-        "🇮🇳 India",
-        len(india_jobs)
-    )
-
-    c2.metric(
-        "🏢 Fortune",
-        len(fortune_jobs)
-    )
-
-    c3.metric(
-        "🌍 Remote",
-        len(remote_jobs)
-    )
-
-    c4.metric(
-        "✈ Abroad",
-        len(abroad_jobs)
-    )
-
-    st.write("")
-
-    # -----------------------------------------------------
-    # No Results
-    # -----------------------------------------------------
-
-    if total_jobs == 0:
-
-        st.warning(
-            """
-No jobs found matching your search.
-
-Try:
-
-• Different keyword
-
-• Remove filters
-
-• Search another technology
-"""
+        st.caption(
+            f"🌍 Remote  **{len(remote_jobs)}**"
         )
 
-        return
-    # -----------------------------------------------------
-    # Pagination
-    # -----------------------------------------------------
+    with info4:
 
-    st.divider()
-
-    PAGE_WINDOW = 5
-
-    start_page = max(
-        1,
-        page - (PAGE_WINDOW // 2)
-    )
-
-    end_page = min(
-        total_pages,
-        start_page + PAGE_WINDOW - 1
-    )
-
-    if end_page - start_page < PAGE_WINDOW:
-
-        start_page = max(
-            1,
-            end_page - PAGE_WINDOW + 1
+        st.caption(
+            f"✈ Abroad  **{len(abroad_jobs)}**"
         )
 
-    col_prev, col_pages, col_next = st.columns([2, 6, 2])
+    # =====================================================
+    # RESULT STATUS
+    # =====================================================
 
-    # -----------------------------------------------------
-    # Previous Button
-    # -----------------------------------------------------
+    if search:
 
-    with col_prev:
-
-        if st.button(
-            "⬅ Previous",
-            disabled=(page == 1),
-            use_container_width=True,
-        ):
-
-            st.session_state.page -= 1
-            st.rerun()
-
-    # -----------------------------------------------------
-    # Page Numbers
-    # -----------------------------------------------------
-
-    with col_pages:
-
-        page_cols = st.columns(end_page - start_page + 1)
-
-        index = 0
-
-        for page_no in range(start_page, end_page + 1):
-
-            with page_cols[index]:
-
-                label = f"[{page_no}]" if page_no == page else str(page_no)
-
-                if st.button(
-                    label,
-                    key=f"page_{page_no}",
-                    use_container_width=True,
-                ):
-
-                    st.session_state.page = page_no
-                    st.rerun()
-
-            index += 1
-
-    # -----------------------------------------------------
-    # Next Button
-    # -----------------------------------------------------
-
-    with col_next:
-
-        if st.button(
-            "Next ➜",
-            disabled=(page == total_pages),
-            use_container_width=True,
-        ):
-
-            st.session_state.page += 1
-            st.rerun()
-
-    # -----------------------------------------------------
-    # Results Summary
-    # -----------------------------------------------------
-
-    st.info(
-
-        f"Showing **{start + 1}** to **{min(end, total_jobs)}** "
-        f"of **{total_jobs}** live opportunities."
-
-    )
-
-    st.write("")
-
-    # -----------------------------------------------------
-    # Job Cards
-    # -----------------------------------------------------
-
-    for job in jobs_to_show:
-
-        show_job_card(job)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-    # -----------------------------------------------------
-    # Bottom Pagination
-    # -----------------------------------------------------
-
-    st.divider()
-
-    bottom_left, bottom_center, bottom_right = st.columns([2, 4, 2])
-
-    with bottom_left:
-
-        if st.button(
-            "⬅ Previous Page",
-            key="bottom_prev",
-            disabled=(page == 1),
-            use_container_width=True,
-        ):
-
-            st.session_state.page -= 1
-            st.rerun()
-
-    with bottom_center:
-
-        st.markdown(
-            f"""
-<div style="text-align:center;
-font-size:16px;
-font-weight:600;
-padding-top:8px;">
-
-Page {page} of {total_pages}
-
-</div>
-""",
-            unsafe_allow_html=True,
+        status_text = (
+            f'Showing results for "{search}"'
         )
 
-    with bottom_right:
+    elif effective_filter == "India":
 
-        if st.button(
-            "Next Page ➜",
-            key="bottom_next",
-            disabled=(page == total_pages),
-            use_container_width=True,
-        ):
+        status_text = (
+            "Showing India opportunities."
+        )
 
-            st.session_state.page += 1
-            st.rerun()
+    elif effective_filter == "Remote":
 
-    # -----------------------------------------------------
-    # Footer Statistics
-    # -----------------------------------------------------
+        status_text = (
+            "Showing remote opportunities."
+        )
 
-    st.divider()
+    elif effective_filter == "Abroad":
 
-    col1, col2, col3, col4 = st.columns(4)
+        status_text = (
+            "Showing global opportunities."
+        )
 
-    col1.metric(
-        "Total Jobs",
-        total_jobs
-    )
+    elif effective_filter == "Verified Jobs":
 
-    col2.metric(
-        "Current Page",
-        page
-    )
+        status_text = (
+            "Showing verified opportunities."
+        )
 
-    col3.metric(
-        "Total Pages",
-        total_pages
-    )
+    else:
 
-    col4.metric(
-        "Showing",
-        len(jobs_to_show)
-    )
-
-    st.write("")
-
-    # -----------------------------------------------------
-    # Portal Information
-    # -----------------------------------------------------
+        status_text = (
+            "Showing the latest opportunities."
+        )
 
     st.markdown(
-        """
-<div style="
-background:#F8FAFC;
-padding:18px;
-border-radius:12px;
-border:1px solid #E5E7EB;
-">
-
-<h4 style="margin-bottom:10px;color:#0F4C81;">
-About VisionBoard Career Portal
-</h4>
-
-<p style="color:#475569;line-height:1.8;">
-
-✔ Latest jobs aggregated from multiple trusted job portals.
-
-<br>
-
-✔ Priority given to Indian opportunities, Fortune 500 companies,
-remote roles and global careers.
-
-<br>
-
-✔ AI-powered ranking engine removes duplicates and promotes
-high-quality opportunities.
-
-</p>
-
-</div>
-""",
+        f"""
+        <div style="
+            display:inline-block;
+            margin:4px 0 14px 0;
+            padding:6px 14px;
+            border-radius:20px;
+            background:#F1F7FC;
+            border:1px solid #D7E8F5;
+            color:#0F4C81;
+            font-size:12px;
+            font-weight:600;
+        ">
+            ● &nbsp; {status_text}
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-    st.write("")
-
-    # -----------------------------------------------------
-    # Last Updated
-    # -----------------------------------------------------
-
-    st.caption(
-        "🔄 Jobs are automatically synchronized every 6 hours."
-    )
-
-    st.caption(
-        f"Showing {len(jobs_to_show)} jobs on this page."
-    )
+    # =====================================================
+    # RESULTS HEADER + PAGINATION
+    # =====================================================
 
     st.write("")
 
-    # -----------------------------------------------------
-    # Back To Top
-    # -----------------------------------------------------
+    header_col, pagination_col = st.columns(
+        [5, 5],
+        vertical_alignment="center",
+    )
 
-    if st.button(
-        "⬆ Back to Top",
-        use_container_width=True,
+    with header_col:
+
+        st.markdown(
+            """
+            <div style="
+                color:#0F4C81;
+                font-size:24px;
+                font-weight:800;
+                margin-bottom:2px;
+            ">
+                💼 Latest Career Opportunities
+            </div>
+
+            <div style="
+                color:#64748B;
+                font-size:13px;
+                margin-bottom:8px;
+            ">
+                Latest opportunities from leading companies
+                across India and worldwide.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with pagination_col:
+
+        show_top_pagination(
+            page,
+            total_pages,
+        )
+
+    # =====================================================
+    # NO RESULTS
+    # =====================================================
+
+    if total_jobs == 0:
+
+        st.info(
+            """
+            No jobs found matching your search.
+
+            Try a different keyword or select
+            "All Jobs".
+            """
+        )
+
+        return
+
+    # =====================================================
+    # RESULT RANGE
+    # =====================================================
+
+    st.caption(
+        f"Showing {start + 1}–"
+        f"{min(end, total_jobs)} "
+        f"of {total_jobs} opportunities."
+    )
+
+    st.write("")
+
+    # =====================================================
+    # JOB CARDS
+    # =====================================================
+
+    for job in jobs_to_show:
+
+        show_job_card(
+            job
+        )
+
+        st.markdown(
+            "<div style='height:8px'></div>",
+            unsafe_allow_html=True,
+        )
+
+    # =====================================================
+    # BOTTOM PAGINATION
+    # =====================================================
+
+    show_bottom_pagination(
+        page,
+        total_pages,
+    )
+
+    # =====================================================
+    # ABOUT VISIONBOARD
+    # =====================================================
+
+    st.write("")
+
+    with st.container(
+        border=True
     ):
 
-        st.rerun() 
+        st.markdown(
+            "### About VisionBoard Career Portal"
+        )
+
+        st.caption(
+            "Latest jobs aggregated from multiple "
+            "trusted job portals."
+        )
+
+        st.caption(
+            "Priority is given to Indian opportunities, "
+            "remote roles, preferred companies and "
+            "global careers."
+        )
+
+        st.caption(
+            "Jobs are automatically synchronized and "
+            "ranked to help candidates find relevant "
+            "opportunities faster."
+        )
+
+    # =====================================================
+    # SYNC INFORMATION
+    # =====================================================
+
+    st.caption(
+        "🔄 Jobs are automatically synchronized "
+        "every 6 hours."
+    )
