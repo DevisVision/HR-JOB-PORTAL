@@ -62,7 +62,7 @@ def fetch_adzuna_jobs():
                 response.raise_for_status()
 
                 jobs = response.json().get("results", [])
-
+               
                 for job in jobs:
 
                     job_id = job.get("id")

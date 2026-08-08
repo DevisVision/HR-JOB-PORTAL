@@ -3,7 +3,6 @@
 VisionBoard Career Portal
 Home Page
 =========================================================
-Professional Job Results Page
 
 Responsibilities:
     - Load jobs from database
@@ -20,10 +19,20 @@ Responsibilities:
 NOTE:
     Footer is intentionally NOT included here.
     app.py should call show_footer() once.
+
+IMPORTANT:
+    This page reads jobs from the database.
+    It does NOT run the 6-hour job ingestion scheduler.
+    The actual job synchronization should be handled by
+    the aggregator/scheduler layer.
 =========================================================
 """
 
 import math
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import streamlit as st
 
 from database.db_service import (
@@ -44,6 +53,8 @@ PAGE_SIZE = 10
 MAX_JOBS_TO_LOAD = 5000
 
 PAGE_WINDOW = 5
+
+JOB_ACTIVE_DAYS = 30
 
 
 # =========================================================
@@ -129,6 +140,25 @@ REMOTE_KEYWORDS = [
 
 
 # =========================================================
+# EXCLUDED JOB TITLE KEYWORDS
+# =========================================================
+
+EXCLUDED_JOB_TITLE_KEYWORDS = [
+    "devops engineer",
+    "devops developer",
+    "devops architect",
+    "devops specialist",
+    "devops lead",
+    "devops manager",
+    "devops consultant",
+    "airflow engineer",
+    "airflow developer",
+    "airflow specialist",
+    "apache airflow",
+]
+
+
+# =========================================================
 # SAFE TEXT
 # =========================================================
 
@@ -144,6 +174,240 @@ def safe_text(value):
 
 
 # =========================================================
+# DATE PARSING
+# =========================================================
+
+def parse_posted_datetime(value):
+    """
+    Convert common posted-date formats into a datetime.
+
+    Returns:
+        datetime | None
+    """
+
+    raw = safe_text(value)
+
+    if not raw:
+        return None
+
+    raw_lower = raw.lower()
+
+    # -----------------------------------------------------
+    # Relative dates
+    # -----------------------------------------------------
+
+    if "today" in raw_lower:
+
+        return datetime.now()
+
+    if "yesterday" in raw_lower:
+
+        return datetime.now().replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+
+    match = re.search(
+        r"(\d+)\s*day",
+        raw_lower,
+    )
+
+    if match:
+
+        days_ago = int(
+            match.group(1)
+        )
+
+        from datetime import timedelta
+
+        return (
+            datetime.now()
+            - timedelta(days=days_ago)
+        )
+
+    # -----------------------------------------------------
+    # ISO date
+    # -----------------------------------------------------
+
+    normalized = raw.replace(
+        "Z",
+        "+00:00",
+    )
+
+    try:
+
+        parsed = datetime.fromisoformat(
+            normalized
+        )
+
+        return parsed
+
+    except ValueError:
+
+        pass
+
+    # -----------------------------------------------------
+    # Common formats
+    # -----------------------------------------------------
+
+    formats = [
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%dT%H:%M:%SZ",
+        "%d-%m-%Y",
+        "%d/%m/%Y",
+        "%m/%d/%Y",
+    ]
+
+    for fmt in formats:
+
+        try:
+
+            return datetime.strptime(
+                raw,
+                fmt,
+            )
+
+        except ValueError:
+
+            continue
+
+    return None
+
+
+# =========================================================
+# JOB EXPIRY
+# =========================================================
+
+def is_expired_job(job):
+    """
+    Hide jobs older than JOB_ACTIVE_DAYS.
+
+    Jobs with missing or unrecognized dates
+    are retained rather than incorrectly removed.
+    """
+
+    posted_date = safe_text(
+        job.get("posted_date")
+    )
+
+    if not posted_date:
+
+        return False
+
+    posted_dt = parse_posted_datetime(
+        posted_date
+    )
+
+    if posted_dt is None:
+
+        return False
+
+    now = datetime.now()
+
+    # -----------------------------------------------------
+    # Convert timezone-aware dates safely
+    # -----------------------------------------------------
+
+    if posted_dt.tzinfo is not None:
+
+        posted_dt = (
+            posted_dt
+            .astimezone(
+                ZoneInfo("Asia/Kolkata")
+            )
+            .replace(
+                tzinfo=None
+            )
+        )
+
+    age_days = (
+        now - posted_dt
+    ).total_seconds() / 86400
+
+    return age_days > JOB_ACTIVE_DAYS
+
+
+# =========================================================
+# EXCLUDED JOB CHECK
+# =========================================================
+
+def is_excluded_job(job):
+    """
+    Exclude DevOps/Airflow-specific job roles.
+
+    Only the job title is checked.
+
+    Therefore:
+
+        Data Engineer + Airflow mention
+            -> allowed
+
+        Data Engineer + DevOps mention
+            -> allowed
+
+        DevOps Engineer
+            -> excluded
+
+        Airflow Engineer
+            -> excluded
+    """
+
+    title = safe_text(
+        job.get("title")
+    ).lower()
+
+    return any(
+        keyword in title
+        for keyword in EXCLUDED_JOB_TITLE_KEYWORDS
+    )
+
+
+# =========================================================
+# VALID JOB CHECK
+# =========================================================
+
+def is_valid_job(job):
+    """
+    Final UAT validation.
+    """
+
+    if is_expired_job(job):
+
+        return False
+
+    if is_excluded_job(job):
+
+        return False
+
+    return True
+
+
+# =========================================================
+# FILTER VALID JOBS
+# =========================================================
+
+def filter_valid_jobs(jobs):
+    """
+    Remove invalid jobs before ranking
+    and pagination.
+    """
+
+    valid_jobs = []
+
+    for job in jobs:
+
+        if is_valid_job(job):
+
+            valid_jobs.append(job)
+
+    return valid_jobs
+
+
+# =========================================================
 # JOB CLASSIFICATION
 # =========================================================
 
@@ -153,14 +417,16 @@ def is_india_job(job):
     """
 
     country = safe_text(
-        job.get("country", "")
+        job.get("country")
     ).lower()
 
     location = safe_text(
-        job.get("location", "")
+        job.get("location")
     ).lower()
 
-    combined = f"{country} {location}"
+    combined = (
+        f"{country} {location}"
+    )
 
     return any(
         keyword in combined
@@ -168,22 +434,24 @@ def is_india_job(job):
     )
 
 
+# =========================================================
+
 def is_remote_job(job):
     """
-    Identify remote jobs from location,
+    Identify remote jobs using location,
     country and description.
     """
 
     location = safe_text(
-        job.get("location", "")
+        job.get("location")
     ).lower()
 
     country = safe_text(
-        job.get("country", "")
+        job.get("country")
     ).lower()
 
     description = safe_text(
-        job.get("description", "")
+        job.get("description")
     ).lower()
 
     combined = (
@@ -198,17 +466,19 @@ def is_remote_job(job):
     )
 
 
+# =========================================================
+
 def is_preferred_company(job):
     """
-    Identify jobs from the organization's
-    preferred company list.
+    Identify jobs from preferred companies.
     """
 
     company = safe_text(
-        job.get("company", "")
+        job.get("company")
     ).upper()
 
     if not company:
+
         return False
 
     return any(
@@ -217,29 +487,32 @@ def is_preferred_company(job):
     )
 
 
+# =========================================================
+
 def is_verified_job(job):
     """
     Current verification rule.
 
     A job is considered verified when:
+
         - company exists
         - apply URL exists
         - source exists
 
-    If a real verified column is added to the DB later,
-    this function can be updated without changing the UI.
+    If a real verified column is added to the
+    database later, this function can be updated.
     """
 
     company = safe_text(
-        job.get("company", "")
+        job.get("company")
     )
 
     apply_url = safe_text(
-        job.get("apply_url", "")
+        job.get("apply_url")
     )
 
     source = safe_text(
-        job.get("source", "")
+        job.get("source")
     )
 
     return bool(
@@ -248,6 +521,8 @@ def is_verified_job(job):
         and source
     )
 
+
+# =========================================================
 
 def is_abroad_job(job):
     """
@@ -266,12 +541,30 @@ def is_abroad_job(job):
 
 def posted_date_key(job):
     """
-    Return posted date safely for sorting.
+    Return a sortable posted-date value.
     """
 
-    return safe_text(
-        job.get("posted_date", "")
+    parsed = parse_posted_datetime(
+        job.get("posted_date")
     )
+
+    if parsed is None:
+
+        return datetime.min
+
+    if parsed.tzinfo is not None:
+
+        parsed = (
+            parsed
+            .astimezone(
+                ZoneInfo("Asia/Kolkata")
+            )
+            .replace(
+                tzinfo=None
+            )
+        )
+
+    return parsed
 
 
 # =========================================================
@@ -283,8 +576,42 @@ def load_jobs(search_text):
     Load jobs from the existing database layer.
 
     IMPORTANT:
-    The existing database logic is preserved.
+
+    This function does NOT run the 6-hour scheduler.
+
+    It simply reads the current database contents.
+
+    If the aggregator updates the database every
+    6 hours, the next portal load will see those
+    newly inserted jobs.
     """
+
+    search_text = safe_text(
+        search_text
+    )
+
+    # =====================================================
+    # UAT RULE
+    # =====================================================
+
+    # If user explicitly searches for a job category
+    # that VisionBoard intentionally excludes,
+    # return no results.
+
+    search_lower = search_text.lower()
+
+    if (
+        search_lower == "devops"
+        or search_lower == "airflow"
+        or "devops engineer" in search_lower
+        or "airflow engineer" in search_lower
+    ):
+
+        return []
+
+    # =====================================================
+    # DATABASE LOAD
+    # =====================================================
 
     with st.spinner(
         "Loading latest opportunities..."
@@ -292,10 +619,10 @@ def load_jobs(search_text):
 
         try:
 
-            if search_text.strip():
+            if search_text:
 
                 jobs = search_jobs(
-                    keyword=search_text.strip(),
+                    keyword=search_text,
                     limit=MAX_JOBS_TO_LOAD,
                     offset=0,
                 )
@@ -314,15 +641,36 @@ def load_jobs(search_text):
             )
 
             st.caption(
-                str(error)
+                f"Database error: {error}"
             )
 
             return []
 
+    # =====================================================
+    # SAFETY
+    # =====================================================
+
     if jobs is None:
+
         return []
 
-    return list(jobs)
+    try:
+
+        jobs = list(jobs)
+
+    except TypeError:
+
+        return []
+
+    # =====================================================
+    # UAT VALIDATION
+    # =====================================================
+
+    jobs = filter_valid_jobs(
+        jobs
+    )
+
+    return jobs
 
 
 # =========================================================
@@ -336,13 +684,18 @@ def apply_location_filter(
     """
     Apply the main radio-button filter.
 
-    Supported values:
+    Supported:
+
         All Jobs
         India
         Remote
         Abroad
         Verified Jobs
     """
+
+    filter_value = safe_text(
+        filter_value
+    )
 
     if filter_value == "India":
 
@@ -417,25 +770,31 @@ def prioritize_jobs(jobs):
         if india:
 
             if preferred:
+
                 india_preferred.append(job)
 
             else:
+
                 india_other.append(job)
 
         elif remote:
 
             if preferred:
+
                 remote_preferred.append(job)
 
             else:
+
                 remote_other.append(job)
 
         else:
 
             if preferred:
+
                 abroad_preferred.append(job)
 
             else:
+
                 abroad_other.append(job)
 
     groups = [
@@ -478,6 +837,7 @@ def show_top_pagination(
     """
 
     if total_pages <= 1:
+
         return
 
     start_page = max(
@@ -516,9 +876,7 @@ def show_top_pagination(
 
         if st.button(
             "‹",
-            disabled=(
-                page == 1
-            ),
+            disabled=page == 1,
             key="top_previous",
             use_container_width=True,
         ):
@@ -530,7 +888,7 @@ def show_top_pagination(
             st.rerun()
 
     # -----------------------------------------------------
-    # Page Numbers
+    # Page numbers
     # -----------------------------------------------------
 
     for index, page_number in enumerate(
@@ -568,9 +926,7 @@ def show_top_pagination(
 
         if st.button(
             "›",
-            disabled=(
-                page == total_pages
-            ),
+            disabled=page == total_pages,
             key="top_next",
             use_container_width=True,
         ):
@@ -595,6 +951,7 @@ def show_bottom_pagination(
     """
 
     if total_pages <= 1:
+
         return
 
     st.divider()
@@ -603,13 +960,15 @@ def show_bottom_pagination(
         [2, 4, 2]
     )
 
+    # -----------------------------------------------------
+    # Previous
+    # -----------------------------------------------------
+
     with left:
 
         if st.button(
             "← Previous",
-            disabled=(
-                page == 1
-            ),
+            disabled=page == 1,
             key="bottom_previous",
             use_container_width=True,
         ):
@@ -619,6 +978,10 @@ def show_bottom_pagination(
             )
 
             st.rerun()
+
+    # -----------------------------------------------------
+    # Page indicator
+    # -----------------------------------------------------
 
     with center:
 
@@ -638,13 +1001,15 @@ def show_bottom_pagination(
             unsafe_allow_html=True,
         )
 
+    # -----------------------------------------------------
+    # Next
+    # -----------------------------------------------------
+
     with right:
 
         if st.button(
             "Next →",
-            disabled=(
-                page == total_pages
-            ),
+            disabled=page == total_pages,
             key="bottom_next",
             use_container_width=True,
         ):
@@ -654,6 +1019,46 @@ def show_bottom_pagination(
             )
 
             st.rerun()
+
+
+# =========================================================
+# BACK TO TOP
+# =========================================================
+
+def show_back_to_top():
+    """
+    Display Back to Top on the right side.
+
+    The control appears immediately above the
+    About VisionBoard Career Portal section.
+
+    Clicking it returns the user to the
+    VisionBoard top anchor.
+    """
+
+    st.markdown(
+        """
+        <div style="
+            width:100%;
+            text-align:right;
+            margin-top:10px;
+            margin-bottom:14px;
+        ">
+            <a
+                href="#visionboard-top"
+                style="
+                    text-decoration:none;
+                    font-size:13px;
+                    font-weight:600;
+                    color:#0F4C81;
+                "
+            >
+                ↑ Back to Top
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # =========================================================
@@ -671,8 +1076,31 @@ def show_home(
     """
     Main VisionBoard job-results page.
 
-    The six parameters correspond to filters.py.
+    Expected filters tuple:
+
+        (
+            search,
+            filter_value,
+            india_only,
+            remote_only,
+            abroad_only,
+            verified_only,
+        )
+
+    app.py should call:
+
+        filters = show_filters()
+        show_home(*filters)
     """
+
+    # =====================================================
+    # TOP ANCHOR
+    # =====================================================
+
+    st.header(
+        "VisionBoard Career Portal",
+        anchor="visionboard-top",
+    )
 
     # =====================================================
     # SESSION STATE
@@ -683,26 +1111,25 @@ def show_home(
         st.session_state.page = 1
 
     # =====================================================
-    # NORMALIZE VALUES
+    # NORMALIZE
     # =====================================================
 
-    search = safe_text(search)
+    search = safe_text(
+        search
+    )
 
     filter_value = safe_text(
         filter_value
     )
 
     # =====================================================
-    # HANDLE QUICK FILTERS
+    # EFFECTIVE FILTER
     # =====================================================
 
-    # The radio-button location filter remains the
-    # primary location filter.
-
-    # These quick-filter flags are also respected
-    # independently when selected.
-
-    effective_filter = filter_value
+    effective_filter = (
+        filter_value
+        or "All Jobs"
+    )
 
     if india_only:
 
@@ -727,10 +1154,10 @@ def show_home(
     current_filter = (
         search,
         effective_filter,
-        india_only,
-        remote_only,
-        abroad_only,
-        verified_only,
+        bool(india_only),
+        bool(remote_only),
+        bool(abroad_only),
+        bool(verified_only),
     )
 
     if (
@@ -775,8 +1202,8 @@ def show_home(
 
         except Exception:
 
-            # Ranking should never stop
-            # the job portal.
+            # Ranking must never break
+            # the portal.
             pass
 
     # =====================================================
@@ -789,7 +1216,7 @@ def show_home(
     )
 
     # =====================================================
-    # PRIORITIZE
+    # PRIORITIZATION
     # =====================================================
 
     jobs = prioritize_jobs(
@@ -835,7 +1262,7 @@ def show_home(
     )
 
     # =====================================================
-    # PAGINATION CALCULATION
+    # PAGINATION
     # =====================================================
 
     total_pages = max(
@@ -852,7 +1279,9 @@ def show_home(
 
         page = total_pages
 
-        st.session_state.page = page
+        st.session_state.page = (
+            page
+        )
 
     start = (
         page - 1
@@ -868,7 +1297,7 @@ def show_home(
     ]
 
     # =====================================================
-    # TOP INFORMATION
+    # STATISTICS ROW
     # =====================================================
 
     info1, info2, info3, info4 = st.columns(
@@ -939,30 +1368,13 @@ def show_home(
             "Showing the latest opportunities."
         )
 
-    st.markdown(
-        f"""
-        <div style="
-            display:inline-block;
-            margin:4px 0 14px 0;
-            padding:6px 14px;
-            border-radius:20px;
-            background:#F1F7FC;
-            border:1px solid #D7E8F5;
-            color:#0F4C81;
-            font-size:12px;
-            font-weight:600;
-        ">
-            ● &nbsp; {status_text}
-        </div>
-        """,
-        unsafe_allow_html=True,
+    st.info(
+        status_text
     )
 
     # =====================================================
-    # RESULTS HEADER + PAGINATION
+    # RESULTS HEADER
     # =====================================================
-
-    st.write("")
 
     header_col, pagination_col = st.columns(
         [5, 5],
@@ -973,25 +1385,11 @@ def show_home(
 
         st.markdown(
             """
-            <div style="
-                color:#0F4C81;
-                font-size:24px;
-                font-weight:800;
-                margin-bottom:2px;
-            ">
-                💼 Latest Career Opportunities
-            </div>
+            ### 💼 Latest Career Opportunities
 
-            <div style="
-                color:#64748B;
-                font-size:13px;
-                margin-bottom:8px;
-            ">
-                Latest opportunities from leading companies
-                across India and worldwide.
-            </div>
-            """,
-            unsafe_allow_html=True,
+            Latest opportunities from leading companies
+            across India and worldwide.
+            """
         )
 
     with pagination_col:
@@ -1007,14 +1405,27 @@ def show_home(
 
     if total_jobs == 0:
 
-        st.info(
-            """
-            No jobs found matching your search.
+        if search:
 
-            Try a different keyword or select
-            "All Jobs".
-            """
+            st.warning(
+                f'No jobs found matching "{search}".'
+            )
+
+        else:
+
+            st.info(
+                "No jobs are currently available "
+                "for the selected filter."
+            )
+
+        st.caption(
+            "Try a different keyword or select "
+            '"All Jobs".'
         )
+
+        # Back to Top is still available
+        # above the About section.
+        show_back_to_top()
 
         return
 
@@ -1055,6 +1466,16 @@ def show_home(
     )
 
     # =====================================================
+    # BACK TO TOP
+    #
+    # IMPORTANT:
+    # This is intentionally BEFORE the About section.
+    # It is aligned to the RIGHT.
+    # =====================================================
+
+    show_back_to_top()
+
+    # =====================================================
     # ABOUT VISIONBOARD
     # =====================================================
 
@@ -1080,16 +1501,6 @@ def show_home(
         )
 
         st.caption(
-            "Jobs are automatically synchronized and "
-            "ranked to help candidates find relevant "
-            "opportunities faster."
+            "Jobs are ranked to help candidates "
+            "find relevant opportunities faster."
         )
-
-    # =====================================================
-    # SYNC INFORMATION
-    # =====================================================
-
-    st.caption(
-        "🔄 Jobs are automatically synchronized "
-        "every 6 hours."
-    )
