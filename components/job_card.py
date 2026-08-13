@@ -7,6 +7,9 @@ Professional Job Card
 
 from pathlib import Path
 import html
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import streamlit as st
 
 
@@ -72,6 +75,76 @@ def get_company_initial(company):
 
 
 # =========================================================
+# POSTED DATE DISPLAY
+# =========================================================
+
+def format_posted_date(value):
+    """
+    Convert source timestamps such as
+    2026-07-22T13:07:34Z into a user-friendly display.
+
+    The database value is not modified.
+    """
+
+    raw = str(value or "").strip()
+
+    if not raw:
+        return ""
+
+    try:
+        parsed = datetime.fromisoformat(
+            raw.replace("Z", "+00:00")
+        )
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(
+                tzinfo=ZoneInfo("Asia/Kolkata")
+            )
+        else:
+            parsed = parsed.astimezone(
+                ZoneInfo("Asia/Kolkata")
+            )
+
+        now = datetime.now(
+            ZoneInfo("Asia/Kolkata")
+        )
+
+        age_seconds = (
+            now - parsed
+        ).total_seconds()
+
+        if 0 <= age_seconds < 86400:
+            hours = int(age_seconds // 3600)
+
+            if hours < 1:
+                minutes = max(
+                    1,
+                    int(age_seconds // 60),
+                )
+                return (
+                    f"Posted {minutes} "
+                    f"minute{'s' if minutes != 1 else ''} ago"
+                )
+
+            return (
+                f"Posted {hours} "
+                f"hour{'s' if hours != 1 else ''} ago"
+            )
+
+        if 0 <= age_seconds < 7 * 86400:
+            days = int(age_seconds // 86400)
+            return (
+                f"Posted {days} "
+                f"day{'s' if days != 1 else ''} ago"
+            )
+
+        return f"Posted {parsed.strftime('%d %b %Y')}"
+
+    except (ValueError, TypeError, OverflowError):
+        return raw
+
+
+# =========================================================
 # JOB CARD
 # =========================================================
 
@@ -101,9 +174,9 @@ def show_job_card(job):
         job.get("salary", "")
     ).strip()
 
-    posted = str(
+    posted = format_posted_date(
         job.get("posted_date", "")
-    ).strip()
+    )
 
     description = str(
         job.get("description", "")

@@ -273,6 +273,61 @@ def get_last_sync():
 
     return None
 # =========================================================
+# SYNC STATUS
+# =========================================================
+
+def ensure_sync_logs_table():
+    """Ensure the sync log table exists without changing job data."""
+    conn = get_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS sync_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT,
+            status TEXT,
+            jobs_added INTEGER DEFAULT 0,
+            jobs_updated INTEGER DEFAULT 0,
+            error_message TEXT,
+            sync_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
+def record_sync_completion(status, jobs_saved=0, error_message=None):
+    """Record one completed/failed portal synchronization event."""
+    ensure_sync_logs_table()
+    conn = get_connection()
+    conn.execute(
+        """
+        INSERT INTO sync_logs
+        (source, status, jobs_added, jobs_updated, error_message, sync_time)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """,
+        ("VisionBoard Sync", status, jobs_saved, 0, error_message),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_last_successful_sync():
+    """Return the timestamp of the latest successful full sync."""
+    ensure_sync_logs_table()
+    result = execute_query(
+        """
+        SELECT MAX(sync_time) AS sync_time
+        FROM sync_logs
+        WHERE status = 'completed'
+          AND source = 'VisionBoard Sync'
+        """,
+        fetch_one=True,
+    )
+    return result["sync_time"] if result else None
+
+
+# =========================================================
 # INSERT SINGLE JOB
 # =========================================================
 

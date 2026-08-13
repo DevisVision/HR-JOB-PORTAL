@@ -17,6 +17,8 @@ from datetime import datetime
 from database.db_service import (
     insert_jobs,
     create_indexes,
+    record_sync_completion,
+    get_last_successful_sync,
 )
 from services.company.resolver import (
     normalize_company,
@@ -24,20 +26,18 @@ from services.company.resolver import (
 )
 
 from services.ranking import rank_jobs
-from services.ranking import rank_jobs
-
 # =========================================================
 # Aggregators
 # =========================================================
 
-from services.aggregators.adzuna import fetch_jobs as fetch_adzuna
-from services.aggregators.arbeitnow import fetch_jobs as fetch_arbeitnow
-from services.aggregators.greenhouse import fetch_jobs as fetch_greenhouse
-from services.aggregators.lever import fetch_jobs as fetch_lever
-from services.aggregators.remoteok import fetch_jobs as fetch_remoteok
-from services.aggregators.remotive import fetch_jobs as fetch_remotive
-from services.aggregators.themuse import fetch_jobs as fetch_themuse
-from services.aggregators.usajobs import fetch_jobs as fetch_usajobs
+from services.aggregators.adzuna import fetch_adzuna_jobs as fetch_adzuna
+from services.aggregators.arbeitnow import fetch_arbeitnow_jobs as fetch_arbeitnow
+from services.aggregators.greenhouse import fetch_greenhouse_jobs as fetch_greenhouse
+from services.aggregators.lever import fetch_lever_jobs as fetch_lever
+from services.aggregators.remoteok import fetch_remoteok_jobs as fetch_remoteok
+from services.aggregators.remotive import fetch_remotive_jobs as fetch_remotive
+from services.aggregators.themuse import fetch_themuse_jobs as fetch_themuse
+from services.aggregators.usajobs import fetch_usajobs as fetch_usajobs
 
 # =========================================================
 # Normalizers
@@ -45,7 +45,7 @@ from services.aggregators.usajobs import fetch_jobs as fetch_usajobs
 
 from services.normalizers.adzuna import normalize as normalize_adzuna
 from services.normalizers.arbeitnow import normalize as normalize_arbeitnow
-from services.normalizers.greenhouse import normalize as normalize_greenhouse
+from services.normalizers.greenhouse import normalize_greenhouse_job as normalize_greenhouse
 from services.normalizers.lever import normalize as normalize_lever
 from services.normalizers.remoteok import normalize as normalize_remoteok
 from services.normalizers.remotive import normalize as normalize_remotive
@@ -1012,35 +1012,83 @@ def safe_sync():
     log("Starting Safe Synchronization")
     log("=" * 70)
 
-    for config in AGGREGATORS:
+    try:
+        for config in AGGREGATORS:
 
-        jobs = run_aggregator_with_retry(config)
+            jobs = run_aggregator_with_retry(config)
 
-        all_jobs.extend(jobs)
+            all_jobs.extend(jobs)
 
-    raw_jobs = len(all_jobs)
+        raw_jobs = len(all_jobs)
 
-    processed_jobs = process_jobs(all_jobs)
+        processed_jobs = process_jobs(all_jobs)
 
-    saved_jobs = save_jobs(processed_jobs)
+        saved_jobs = save_jobs(processed_jobs)
 
-    database_maintenance()
+        database_maintenance()
 
-    update_statistics(
+        update_statistics(
+            raw_jobs,
+            len(processed_jobs),
+            saved_jobs,
+        )
 
-        raw_jobs,
+        # Record the completion separately from individual job updated_at values.
+        # This does not alter job filtering, ranking, ordering, or posted dates.
+        if SYNC_STATS["failed_aggregators"] and not processed_jobs:
+            record_sync_completion(
+                "failed",
+                saved_jobs,
+                "; ".join(SYNC_STATS["failed_aggregators"]),
+            )
+        else:
+            record_sync_completion("completed", saved_jobs)
 
-        len(processed_jobs),
+        print_statistics()
+        print_health_report()
+        log("Synchronization Finished Successfully.")
 
-        saved_jobs,
+        return saved_jobs
 
-    )
+    except Exception as exc:
+        try:
+            record_sync_completion("failed", 0, str(exc))
+        except Exception:
+            pass
+        raise
 
-    print_statistics()
 
-    print_health_report()
+def sync_is_due(interval_hours=6):
+    """Return True when the portal has never completed a sync or the last one is older than the interval."""
+    last_sync = get_last_successful_sync()
 
-    log("Synchronization Finished Successfully.")
+    if not last_sync:
+        return True
+
+    try:
+        last_dt = datetime.fromisoformat(str(last_sync).replace("Z", "+00:00"))
+        # SQLite CURRENT_TIMESTAMP is stored as UTC. Treat a naive
+        # timestamp from sync_logs as UTC, not as the Streamlit server's
+        # local time. This keeps the 6-hour interval correct on Cloud.
+        if last_dt.tzinfo is None:
+            from datetime import timezone
+            last_dt = last_dt.replace(tzinfo=timezone.utc)
+
+        from datetime import timezone
+        now = datetime.now(timezone.utc)
+        return (now - last_dt).total_seconds() >= interval_hours * 3600
+    except (TypeError, ValueError):
+        # A malformed/missing sync timestamp should cause a safe refresh.
+        return True
+
+
+def maybe_run_scheduled_sync(interval_hours=6):
+    """Run the existing safe sync only when the last successful sync is due."""
+    if not sync_is_due(interval_hours):
+        return False
+
+    safe_sync()
+    return True
 
 
 # =========================================================

@@ -91,6 +91,24 @@ def show_filters():
         key="job_location_filter",
     )
 
+    # =====================================================
+    # JOB FRESHNESS FILTER
+    # =====================================================
+
+    freshness_filter = st.radio(
+        "Job Freshness",
+        [
+            "Any time",
+            "Past 24 hours",
+            "Past 3 days",
+            "Past 5 days",
+            "Past 7 days",
+        ],
+        horizontal=True,
+        index=0,
+        key="job_freshness_filter",
+    )
+
 
     # =====================================================
     # CONVERT RADIO FILTER
@@ -128,4 +146,5 @@ def show_filters():
         remote_only,
         abroad_only,
         verified_only,
+        freshness_filter,
     )
