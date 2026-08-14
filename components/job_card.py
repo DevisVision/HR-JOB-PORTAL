@@ -9,6 +9,7 @@ from pathlib import Path
 import html
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from urllib.parse import quote
 
 import streamlit as st
 
@@ -315,3 +316,15 @@ def show_job_card(job):
                     apply_url,
                     use_container_width=True,
                 )
+
+                share_text = f"{title} - {company}\n{apply_url}"
+                whatsapp_url = f"https://wa.me/?text={quote(share_text)}"
+                email_subject = quote(f"Job Opportunity: {title} - {company}")
+                email_body = quote(share_text)
+                email_url = f"mailto:?subject={email_subject}&body={email_body}"
+
+                with st.popover("↗ Share", use_container_width=True):
+                    st.link_button("WhatsApp", whatsapp_url, use_container_width=True)
+                    st.link_button("Email", email_url, use_container_width=True)
+                    st.code(apply_url, language=None)
+                    st.caption("Copy the link above to share it anywhere else.")

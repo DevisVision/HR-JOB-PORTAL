@@ -41,7 +41,6 @@ from database.db_service import (
 )
 
 from services.ranking import rank_jobs
-from services.filters.job_filter import is_relevant_job
 from components.job_card import show_job_card
 
 
@@ -284,36 +283,57 @@ def parse_posted_datetime(value):
 # =========================================================
 
 def is_expired_job(job):
-    """Return True only for genuinely stale/expired jobs.
+    """
+    Hide jobs older than JOB_ACTIVE_DAYS.
 
-    Sources with a closing date (notably Technopark) stay active until their
-    closing date even when the posting itself is older than 30 days. Sources
-    without a closing date retain the existing 30-day fallback.
+    Jobs with missing or unrecognized dates
+    are retained rather than incorrectly removed.
     """
 
-    closing_date = safe_text(job.get("closing_date"))
-    if closing_date:
-        closing_dt = parse_posted_datetime(closing_date)
-        if closing_dt is not None:
-            if closing_dt.tzinfo is not None:
-                closing_dt = closing_dt.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
-            today = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
-            return closing_dt.date() < today.date()
+    posted_date = safe_text(
+        job.get("posted_date")
+    )
 
-    posted_date = safe_text(job.get("posted_date"))
     if not posted_date:
+
         return False
 
-    posted_dt = parse_posted_datetime(posted_date)
+    posted_dt = parse_posted_datetime(
+        posted_date
+    )
+
     if posted_dt is None:
+
         return False
+
+    now = datetime.now()
+
+    # -----------------------------------------------------
+    # Convert timezone-aware dates safely
+    # -----------------------------------------------------
 
     if posted_dt.tzinfo is not None:
-        posted_dt = posted_dt.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
 
-    age_days = (datetime.now() - posted_dt).total_seconds() / 86400
+        posted_dt = (
+            posted_dt
+            .astimezone(
+                ZoneInfo("Asia/Kolkata")
+            )
+            .replace(
+                tzinfo=None
+            )
+        )
+
+    age_days = (
+        now - posted_dt
+    ).total_seconds() / 86400
+
     return age_days > JOB_ACTIVE_DAYS
 
+
+# =========================================================
+# EXCLUDED JOB CHECK
+# =========================================================
 
 def is_excluded_job(job):
     """
@@ -385,100 +405,6 @@ def filter_valid_jobs(jobs):
             valid_jobs.append(job)
 
     return valid_jobs
-
-
-# =========================================================
-# SEARCH VALID JOBS
-# =========================================================
-
-def filter_search_jobs(jobs):
-    """Validate explicit searches without applying the category gate.
-
-    The home/default feed intentionally shows VisionBoard's Data/AI/Cloud
-    categories.  An explicit company search is different: HR may search for
-    UST, IBS, PITS, or an unknown employer and expect the employer's active
-    jobs even when a particular role is not one of the default categories.
-
-    Expiry and dedicated DevOps/Airflow exclusions still apply.
-    """
-    valid_jobs = []
-
-    for job in jobs:
-        if is_expired_job(job):
-            continue
-
-        if is_excluded_job(job):
-            continue
-
-        if not safe_text(job.get("title")):
-            continue
-
-        if not safe_text(job.get("company")):
-            continue
-
-        if not safe_text(job.get("apply_url")):
-            continue
-
-        valid_jobs.append(job)
-
-    return valid_jobs
-
-
-# =========================================================
-# JOB FRESHNESS FILTER
-# =========================================================
-
-FRESHNESS_DAYS = {
-    "Any time": None,
-    "Past 24 hours": 1,
-    "Past 3 days": 3,
-    "Past 5 days": 5,
-    "Past 7 days": 7,
-}
-
-
-def apply_freshness_filter(jobs, freshness_filter):
-    """
-    Apply an additive freshness filter before the existing
-    ranking and India -> Remote -> Abroad prioritization.
-    """
-
-    max_days = FRESHNESS_DAYS.get(
-        safe_text(freshness_filter),
-    )
-
-    if max_days is None:
-        return jobs
-
-    now = datetime.now(ZoneInfo("Asia/Kolkata"))
-    filtered_jobs = []
-
-    for job in jobs:
-
-        posted_dt = parse_posted_datetime(
-            job.get("posted_date")
-        )
-
-        if posted_dt is None:
-            continue
-
-        if posted_dt.tzinfo is None:
-            posted_dt = posted_dt.replace(
-                tzinfo=ZoneInfo("Asia/Kolkata")
-            )
-        else:
-            posted_dt = posted_dt.astimezone(
-                ZoneInfo("Asia/Kolkata")
-            )
-
-        age_hours = (
-            now - posted_dt
-        ).total_seconds() / 3600
-
-        if 0 <= age_hours <= max_days * 24:
-            filtered_jobs.append(job)
-
-    return filtered_jobs
 
 
 # =========================================================
@@ -642,95 +568,6 @@ def posted_date_key(job):
 
 
 # =========================================================
-# STRICT SEARCH MATCH
-# =========================================================
-
-def search_matches_job(job, search_text):
-    """Return True when a user search matches a job naturally and safely.
-
-    The search box is intentionally simple: HR can type one phrase such as
-    ``UST``, ``IBS``, ``pits``, ``data engineer`` or ``UST data engineer``.
-    No comma-separated search syntax is required.
-
-    Matching rules:
-      * title/company/skills/location are searched;
-      * company aliases are supported (for example ``EY GDS`` -> ``EY``);
-      * short company abbreviations such as ``pits`` match ``PIT Solutions``
-        through a compact company-name comparison;
-      * multi-word searches match the phrase or all search words;
-      * the full description is deliberately not searched to avoid false
-        positives such as ``UST`` matching ``customer``.
-    """
-
-    term = safe_text(search_text).lower()
-
-    if not term:
-        return True
-
-    fields = (
-        safe_text(job.get("title", "")),
-        safe_text(job.get("company", "")),
-        safe_text(job.get("skills", "")),
-        safe_text(job.get("location", "")),
-        safe_text(job.get("source", "")),
-        safe_text(job.get("apply_url", "")),
-    )
-    combined = " ".join(fields).lower()
-
-    # Exact phrase / word-aware match.
-    pattern = re.compile(
-        r"(?<!\w)" + re.escape(term) + r"(?!\w)",
-        re.IGNORECASE,
-    )
-    if pattern.search(combined):
-        return True
-
-    # Company aliases are normalized in the database. This lets searches
-    # such as "EY GDS", "Tata Consultancy Services" or "AWS" find their
-    # canonical company records.
-    try:
-        from services.company.resolver import resolve_alias
-        canonical_term = safe_text(resolve_alias(search_text)).lower()
-    except Exception:
-        canonical_term = ""
-
-    if canonical_term and canonical_term != term:
-        canonical_pattern = re.compile(
-            r"(?<!\w)" + re.escape(canonical_term) + r"(?!\w)",
-            re.IGNORECASE,
-        )
-        if canonical_pattern.search(safe_text(job.get("company", ""))):
-            return True
-
-    # Compact company matching is deliberately conservative.  The old
-    # implementation used ``compact_query in compact_company`` which caused
-    # ``UST`` to match the letters inside ``Customer``.  Only allow a compact
-    # company prefix/exact match or a true company-word acronym.
-    company = safe_text(job.get("company", ""))
-    compact_query = re.sub(r"[^a-z0-9]", "", term)
-    company_words = re.findall(r"[a-z0-9]+", company.lower())
-    compact_company = "".join(company_words)
-    if compact_query and len(compact_query) >= 3:
-        if compact_company == compact_query or compact_company.startswith(compact_query):
-            return True
-        acronym = "".join(word[0] for word in company_words if word)
-        if acronym == compact_query:
-            return True
-
-    # For a multi-word search, require every meaningful word to be present
-    # somewhere in the searchable fields. This makes ``UST data engineer``
-    # useful while keeping the UI free from comma-separated syntax.
-    words = re.findall(r"[a-z0-9]+", term)
-    if len(words) > 1:
-        return all(
-            re.search(r"(?<!\w)" + re.escape(word) + r"(?!\w)", combined, re.IGNORECASE)
-            for word in words
-        )
-
-    return False
-
-
-# =========================================================
 # LOAD JOBS
 # =========================================================
 
@@ -829,35 +666,9 @@ def load_jobs(search_text):
     # UAT VALIDATION
     # =====================================================
 
-    if search_text:
-        # Explicit searches are allowed to find any active employer/job.
-        # This is essential for UST/IBS/PITS and unknown-company searches.
-        jobs = filter_search_jobs(jobs)
-
-        # The database query is intentionally broad for compatibility. The
-        # final word-aware matcher prevents false positives such as UST
-        # matching the letters inside "Gusto" or "Customer".
-        jobs = [
-            job
-            for job in jobs
-            if search_matches_job(job, search_text)
-        ]
-    else:
-        # Default feed keeps the existing VisionBoard category policy.
-        jobs = filter_valid_jobs(jobs)
-
-        # Technopark is collected broadly so company searches work, but the
-        # default home feed still shows only the portal's technology focus.
-        jobs = [
-            job
-            for job in jobs
-            if str(job.get("source", "")).strip().lower() != "technopark"
-            or is_relevant_job(
-                job.get("title", ""),
-                job.get("description", ""),
-                job.get("skills", ""),
-            )
-        ]
+    jobs = filter_valid_jobs(
+        jobs
+    )
 
     return jobs
 
@@ -1261,7 +1072,6 @@ def show_home(
     remote_only,
     abroad_only,
     verified_only,
-    freshness_filter,
 ):
     """
     Main VisionBoard job-results page.
@@ -1275,7 +1085,6 @@ def show_home(
             remote_only,
             abroad_only,
             verified_only,
-            freshness_filter,
         )
 
     app.py should call:
@@ -1313,10 +1122,6 @@ def show_home(
         filter_value
     )
 
-    freshness_filter = safe_text(
-        freshness_filter
-    ) or "Any time"
-
     # =====================================================
     # EFFECTIVE FILTER
     # =====================================================
@@ -1353,7 +1158,6 @@ def show_home(
         bool(remote_only),
         bool(abroad_only),
         bool(verified_only),
-        freshness_filter,
     )
 
     if (
@@ -1382,15 +1186,6 @@ def show_home(
 
     jobs = load_jobs(
         search
-    )
-
-    # =====================================================
-    # JOB FRESHNESS
-    # =====================================================
-
-    jobs = apply_freshness_filter(
-        jobs,
-        freshness_filter,
     )
 
     # =====================================================
@@ -1572,9 +1367,6 @@ def show_home(
         status_text = (
             "Showing the latest opportunities."
         )
-
-    if freshness_filter != "Any time":
-        status_text += f" Freshness: {freshness_filter}."
 
     st.info(
         status_text

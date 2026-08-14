@@ -1,36 +1,31 @@
 """
-=========================================================
 VisionBoard Career Portal
-Home Page
-=========================================================
+pages/home.py
 
 Responsibilities:
-    - Load jobs from database
-    - Primary search
-    - Location filtering
-    - Verified filtering
-    - Job ranking
-    - India-first ordering
-    - Preferred-company prioritization
-    - Remote / Abroad classification
-    - Pagination
-    - Job card display
-
-NOTE:
-    Footer is intentionally NOT included here.
-    app.py should call show_footer() once.
+- Load jobs from database
+- Apply VisionBoard relevance rules
+- Primary search
+- Location filtering
+- Verified filtering
+- Expired-job filtering
+- DevOps/Airflow exclusion
+- Job ranking
+- India-first ordering
+- Preferred-company prioritization
+- Remote / Abroad classification
+- Pagination
+- Job card display
 
 IMPORTANT:
-    This page reads jobs from the database.
-    It does NOT run the 6-hour job ingestion scheduler.
-    The actual job synchronization should be handled by
-    the aggregator/scheduler layer.
-=========================================================
+- This file does NOT control job synchronization.
+- This file does NOT modify the database.
+- Sync continues to be handled by sync_service.py / GitHub Actions.
 """
 
 import math
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import streamlit as st
@@ -41,8 +36,9 @@ from database.db_service import (
 )
 
 from services.ranking import rank_jobs
-from services.filters.job_filter import is_relevant_job
 from components.job_card import show_job_card
+
+from config.company_priority import FORTUNE_PRIORITY
 
 
 # =========================================================
@@ -50,43 +46,166 @@ from components.job_card import show_job_card
 # =========================================================
 
 PAGE_SIZE = 10
-
 MAX_JOBS_TO_LOAD = 5000
-
 PAGE_WINDOW = 5
 
+# Jobs older than this are hidden from the portal.
 JOB_ACTIVE_DAYS = 30
 
 
 # =========================================================
-# PREFERRED COMPANIES
+# VISIONBOARD RELEVANCE KEYWORDS
+# =========================================================
+#
+# These keywords define the type of jobs VisionBoard
+# should display.
+#
+# IMPORTANT:
+# Airflow is intentionally NOT included here as a primary
+# technology because dedicated Airflow roles are excluded.
+#
+# Airflow mentioned inside a Data Engineering job is still
+# allowed.
 # =========================================================
 
-PREFERRED_COMPANIES = [
-    "IBM",
-    "UST",
-    "EY",
-    "ERNST & YOUNG",
-    "ALLIANZ",
-    "CAPGEMINI",
-    "CISCO",
-    "KPMG",
-    "DELOITTE",
-    "PWC",
-    "PRICEWATERHOUSECOOPERS",
-    "WIPRO",
-    "COGNIZANT",
-    "ACCENTURE",
-    "TECH MAHINDRA",
-    "MICROSOFT",
-    "GOOGLE",
-    "AMAZON",
-    "ORACLE",
-    "INFOSYS",
-    "TCS",
-    "TATA CONSULTANCY SERVICES",
-    "HCL",
-    "HCLTECH",
+RELEVANT_JOB_KEYWORDS = [
+
+    # -----------------------------------------------------
+    # Data Engineering
+    # -----------------------------------------------------
+
+    "data engineer",
+    "senior data engineer",
+    "lead data engineer",
+    "big data engineer",
+    "data engineering",
+    "data architect",
+    "data platform engineer",
+    "data pipeline",
+    "etl",
+    "etl developer",
+    "data warehouse",
+    "data warehouse engineer",
+    "data integration",
+
+    # -----------------------------------------------------
+    # Azure
+    # -----------------------------------------------------
+
+    "azure",
+    "azure data engineer",
+    "azure data factory",
+    "adf",
+    "azure synapse",
+    "synapse",
+    "azure databricks",
+    "microsoft fabric",
+    "fabric data",
+    "data lake",
+    "adls",
+    "adls gen2",
+
+    # -----------------------------------------------------
+    # AWS
+    # -----------------------------------------------------
+
+    "aws",
+    "aws data engineer",
+    "aws glue",
+    "redshift",
+    "athena",
+    "s3",
+    "emr",
+
+    # -----------------------------------------------------
+    # GCP
+    # -----------------------------------------------------
+
+    "gcp",
+    "google cloud",
+    "bigquery",
+    "dataflow",
+
+    # -----------------------------------------------------
+    # Spark / PySpark
+    # -----------------------------------------------------
+
+    "pyspark",
+    "spark",
+    "apache spark",
+
+    # -----------------------------------------------------
+    # Databricks
+    # -----------------------------------------------------
+
+    "databricks",
+    "delta lake",
+    "unity catalog",
+
+    # -----------------------------------------------------
+    # Snowflake
+    # -----------------------------------------------------
+
+    "snowflake",
+
+    # -----------------------------------------------------
+    # SQL
+    # -----------------------------------------------------
+
+    "sql",
+    "sql developer",
+    "sql server",
+    "postgresql",
+    "mysql",
+
+    # -----------------------------------------------------
+    # Python
+    # -----------------------------------------------------
+
+    "python",
+    "python developer",
+    "backend python",
+    "fastapi",
+    "django",
+    "flask",
+
+    # -----------------------------------------------------
+    # Kafka / Streaming
+    # -----------------------------------------------------
+
+    "kafka",
+    "apache kafka",
+    "event hub",
+    "eventhub",
+    "streaming",
+
+    # -----------------------------------------------------
+    # Analytics / BI
+    # -----------------------------------------------------
+
+    "data analyst",
+    "business intelligence",
+    "bi developer",
+    "power bi",
+
+    # -----------------------------------------------------
+    # AI / ML / GenAI
+    # -----------------------------------------------------
+
+    "ai engineer",
+    "machine learning engineer",
+    "machine learning",
+    "artificial intelligence",
+    "generative ai",
+    "genai",
+    "llm",
+    "rag",
+    "langchain",
+    "openai",
+    "prompt engineer",
+    "prompt engineering",
+    "vector database",
+
 ]
 
 
@@ -95,6 +214,7 @@ PREFERRED_COMPANIES = [
 # =========================================================
 
 INDIA_KEYWORDS = [
+
     "india",
     "bangalore",
     "bengaluru",
@@ -122,6 +242,7 @@ INDIA_KEYWORDS = [
     "vadodara",
     "surat",
     "bhubaneswar",
+
 ]
 
 
@@ -130,6 +251,7 @@ INDIA_KEYWORDS = [
 # =========================================================
 
 REMOTE_KEYWORDS = [
+
     "remote",
     "work from home",
     "wfh",
@@ -137,14 +259,32 @@ REMOTE_KEYWORDS = [
     "anywhere",
     "worldwide",
     "distributed",
+
 ]
 
 
 # =========================================================
 # EXCLUDED JOB TITLE KEYWORDS
 # =========================================================
+#
+# IMPORTANT:
+#
+# "Data Engineer requiring Airflow"
+#       -> ALLOWED
+#
+# "Data Engineer requiring DevOps knowledge"
+#       -> ALLOWED
+#
+# "Airflow Engineer"
+#       -> EXCLUDED
+#
+# "DevOps Engineer"
+#       -> EXCLUDED
+#
+# =========================================================
 
 EXCLUDED_JOB_TITLE_KEYWORDS = [
+
     "devops engineer",
     "devops developer",
     "devops architect",
@@ -152,10 +292,13 @@ EXCLUDED_JOB_TITLE_KEYWORDS = [
     "devops lead",
     "devops manager",
     "devops consultant",
+
     "airflow engineer",
     "airflow developer",
     "airflow specialist",
-    "apache airflow",
+    "airflow architect",
+    "airflow consultant",
+
 ]
 
 
@@ -175,12 +318,54 @@ def safe_text(value):
 
 
 # =========================================================
+# NORMALIZE TEXT
+# =========================================================
+
+def normalize_text(value):
+    """
+    Normalize text for reliable keyword matching.
+    """
+
+    text = safe_text(value).lower()
+
+    text = re.sub(
+        r"\s+",
+        " ",
+        text,
+    )
+
+    return text.strip()
+
+
+# =========================================================
+# JOB SEARCHABLE TEXT
+# =========================================================
+
+def get_job_search_text(job):
+    """
+    Build searchable text from the important job fields.
+    """
+
+    return " ".join(
+        [
+            normalize_text(job.get("title")),
+            normalize_text(job.get("company")),
+            normalize_text(job.get("skills")),
+            normalize_text(job.get("location")),
+            normalize_text(job.get("country")),
+            normalize_text(job.get("description")),
+            normalize_text(job.get("employment_type")),
+        ]
+    )
+
+
+# =========================================================
 # DATE PARSING
 # =========================================================
 
 def parse_posted_datetime(value):
     """
-    Convert common posted-date formats into a datetime.
+    Convert common posted-date formats into datetime.
 
     Returns:
         datetime | None
@@ -193,22 +378,18 @@ def parse_posted_datetime(value):
 
     raw_lower = raw.lower()
 
+    now = datetime.now()
+
     # -----------------------------------------------------
     # Relative dates
     # -----------------------------------------------------
 
     if "today" in raw_lower:
-
-        return datetime.now()
+        return now
 
     if "yesterday" in raw_lower:
 
-        return datetime.now().replace(
-            hour=0,
-            minute=0,
-            second=0,
-            microsecond=0,
-        )
+        return now - timedelta(days=1)
 
     match = re.search(
         r"(\d+)\s*day",
@@ -221,10 +402,8 @@ def parse_posted_datetime(value):
             match.group(1)
         )
 
-        from datetime import timedelta
-
         return (
-            datetime.now()
+            now
             - timedelta(days=days_ago)
         )
 
@@ -239,14 +418,11 @@ def parse_posted_datetime(value):
 
     try:
 
-        parsed = datetime.fromisoformat(
+        return datetime.fromisoformat(
             normalized
         )
 
-        return parsed
-
     except ValueError:
-
         pass
 
     # -----------------------------------------------------
@@ -254,6 +430,7 @@ def parse_posted_datetime(value):
     # -----------------------------------------------------
 
     formats = [
+
         "%Y-%m-%d",
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S",
@@ -261,6 +438,7 @@ def parse_posted_datetime(value):
         "%d-%m-%Y",
         "%d/%m/%Y",
         "%m/%d/%Y",
+
     ]
 
     for fmt in formats:
@@ -280,65 +458,89 @@ def parse_posted_datetime(value):
 
 
 # =========================================================
+# CONVERT DATETIME TO IST-NAIVE
+# =========================================================
+
+def normalize_datetime(value):
+    """
+    Convert timezone-aware datetime to IST and remove
+    timezone information so comparisons are safe.
+    """
+
+    if value is None:
+        return None
+
+    if value.tzinfo is not None:
+
+        value = (
+            value
+            .astimezone(
+                ZoneInfo("Asia/Kolkata")
+            )
+            .replace(
+                tzinfo=None
+            )
+        )
+
+    return value
+
+
+# =========================================================
 # JOB EXPIRY
 # =========================================================
 
 def is_expired_job(job):
-    """Return True only for genuinely stale/expired jobs.
+    """
+    Hide jobs older than JOB_ACTIVE_DAYS.
 
-    Sources with a closing date (notably Technopark) stay active until their
-    closing date even when the posting itself is older than 30 days. Sources
-    without a closing date retain the existing 30-day fallback.
+    Jobs with missing or unrecognized dates are retained
+    rather than incorrectly removed.
     """
 
-    closing_date = safe_text(job.get("closing_date"))
-    if closing_date:
-        closing_dt = parse_posted_datetime(closing_date)
-        if closing_dt is not None:
-            if closing_dt.tzinfo is not None:
-                closing_dt = closing_dt.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
-            today = datetime.now(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
-            return closing_dt.date() < today.date()
+    posted_date = safe_text(
+        job.get("posted_date")
+    )
 
-    posted_date = safe_text(job.get("posted_date"))
     if not posted_date:
         return False
 
-    posted_dt = parse_posted_datetime(posted_date)
+    posted_dt = parse_posted_datetime(
+        posted_date
+    )
+
     if posted_dt is None:
         return False
 
-    if posted_dt.tzinfo is not None:
-        posted_dt = posted_dt.astimezone(ZoneInfo("Asia/Kolkata")).replace(tzinfo=None)
+    posted_dt = normalize_datetime(
+        posted_dt
+    )
 
-    age_days = (datetime.now() - posted_dt).total_seconds() / 86400
+    now = datetime.now()
+
+    age_days = (
+        now - posted_dt
+    ).total_seconds() / 86400
+
     return age_days > JOB_ACTIVE_DAYS
 
 
+# =========================================================
+# EXCLUDED JOB CHECK
+# =========================================================
+
 def is_excluded_job(job):
     """
-    Exclude DevOps/Airflow-specific job roles.
+    Exclude dedicated DevOps/Airflow job roles.
 
     Only the job title is checked.
-
-    Therefore:
-
-        Data Engineer + Airflow mention
-            -> allowed
-
-        Data Engineer + DevOps mention
-            -> allowed
-
-        DevOps Engineer
-            -> excluded
-
-        Airflow Engineer
-            -> excluded
     """
 
-    title = safe_text(
+    title = normalize_text(
         job.get("title")
-    ).lower()
+    )
+
+    if not title:
+        return False
 
     return any(
         keyword in title
@@ -347,20 +549,64 @@ def is_excluded_job(job):
 
 
 # =========================================================
+# VISIONBOARD RELEVANCE CHECK
+# =========================================================
+
+def is_relevant_job(job):
+    """
+    Determines whether a job belongs to the technology
+    areas supported by VisionBoard.
+
+    This is the IMPORTANT protection against the portal
+    displaying every unrelated job in the database.
+
+    A job must contain at least one VisionBoard technology
+    keyword in its title, company, skills, description,
+    location or country.
+
+    Dedicated DevOps/Airflow roles are rejected separately.
+    """
+
+    if is_excluded_job(job):
+        return False
+
+    searchable_text = get_job_search_text(
+        job
+    )
+
+    if not searchable_text:
+        return False
+
+    for keyword in RELEVANT_JOB_KEYWORDS:
+
+        if keyword in searchable_text:
+            return True
+
+    return False
+
+
+# =========================================================
 # VALID JOB CHECK
 # =========================================================
 
 def is_valid_job(job):
     """
-    Final UAT validation.
+    Final VisionBoard validation.
+
+    Rules:
+
+    1. Expired jobs -> hidden
+    2. Dedicated DevOps/Airflow -> hidden
+    3. Irrelevant jobs -> hidden
     """
 
     if is_expired_job(job):
-
         return False
 
     if is_excluded_job(job):
+        return False
 
+    if not is_relevant_job(job):
         return False
 
     return True
@@ -372,8 +618,8 @@ def is_valid_job(job):
 
 def filter_valid_jobs(jobs):
     """
-    Remove invalid jobs before ranking
-    and pagination.
+    Remove invalid/unrelated jobs before ranking,
+    location classification and pagination.
     """
 
     valid_jobs = []
@@ -388,101 +634,7 @@ def filter_valid_jobs(jobs):
 
 
 # =========================================================
-# SEARCH VALID JOBS
-# =========================================================
-
-def filter_search_jobs(jobs):
-    """Validate explicit searches without applying the category gate.
-
-    The home/default feed intentionally shows VisionBoard's Data/AI/Cloud
-    categories.  An explicit company search is different: HR may search for
-    UST, IBS, PITS, or an unknown employer and expect the employer's active
-    jobs even when a particular role is not one of the default categories.
-
-    Expiry and dedicated DevOps/Airflow exclusions still apply.
-    """
-    valid_jobs = []
-
-    for job in jobs:
-        if is_expired_job(job):
-            continue
-
-        if is_excluded_job(job):
-            continue
-
-        if not safe_text(job.get("title")):
-            continue
-
-        if not safe_text(job.get("company")):
-            continue
-
-        if not safe_text(job.get("apply_url")):
-            continue
-
-        valid_jobs.append(job)
-
-    return valid_jobs
-
-
-# =========================================================
-# JOB FRESHNESS FILTER
-# =========================================================
-
-FRESHNESS_DAYS = {
-    "Any time": None,
-    "Past 24 hours": 1,
-    "Past 3 days": 3,
-    "Past 5 days": 5,
-    "Past 7 days": 7,
-}
-
-
-def apply_freshness_filter(jobs, freshness_filter):
-    """
-    Apply an additive freshness filter before the existing
-    ranking and India -> Remote -> Abroad prioritization.
-    """
-
-    max_days = FRESHNESS_DAYS.get(
-        safe_text(freshness_filter),
-    )
-
-    if max_days is None:
-        return jobs
-
-    now = datetime.now(ZoneInfo("Asia/Kolkata"))
-    filtered_jobs = []
-
-    for job in jobs:
-
-        posted_dt = parse_posted_datetime(
-            job.get("posted_date")
-        )
-
-        if posted_dt is None:
-            continue
-
-        if posted_dt.tzinfo is None:
-            posted_dt = posted_dt.replace(
-                tzinfo=ZoneInfo("Asia/Kolkata")
-            )
-        else:
-            posted_dt = posted_dt.astimezone(
-                ZoneInfo("Asia/Kolkata")
-            )
-
-        age_hours = (
-            now - posted_dt
-        ).total_seconds() / 3600
-
-        if 0 <= age_hours <= max_days * 24:
-            filtered_jobs.append(job)
-
-    return filtered_jobs
-
-
-# =========================================================
-# JOB CLASSIFICATION
+# INDIA JOB
 # =========================================================
 
 def is_india_job(job):
@@ -490,13 +642,13 @@ def is_india_job(job):
     Identify India jobs using country and location.
     """
 
-    country = safe_text(
+    country = normalize_text(
         job.get("country")
-    ).lower()
+    )
 
-    location = safe_text(
+    location = normalize_text(
         job.get("location")
-    ).lower()
+    )
 
     combined = (
         f"{country} {location}"
@@ -509,24 +661,29 @@ def is_india_job(job):
 
 
 # =========================================================
+# REMOTE JOB
+# =========================================================
 
 def is_remote_job(job):
     """
-    Identify remote jobs using location,
-    country and description.
+    Identify remote jobs using location, country and
+    description.
+
+    India + Remote is classified as India first when
+    prioritizing jobs.
     """
 
-    location = safe_text(
+    location = normalize_text(
         job.get("location")
-    ).lower()
+    )
 
-    country = safe_text(
+    country = normalize_text(
         job.get("country")
-    ).lower()
+    )
 
-    description = safe_text(
+    description = normalize_text(
         job.get("description")
-    ).lower()
+    )
 
     combined = (
         f"{location} "
@@ -541,10 +698,16 @@ def is_remote_job(job):
 
 
 # =========================================================
+# PREFERRED COMPANY PRIORITY
+# =========================================================
 
-def is_preferred_company(job):
+def get_company_priority(job):
     """
-    Identify jobs from preferred companies.
+    Return the priority configured in:
+
+        config/company_prioroty.py
+
+    Higher number = higher priority.
     """
 
     company = safe_text(
@@ -552,15 +715,56 @@ def is_preferred_company(job):
     ).upper()
 
     if not company:
+        return 0
 
-        return False
+    best_priority = 0
 
-    return any(
-        company_name in company
-        for company_name in PREFERRED_COMPANIES
+    for company_name, priority in FORTUNE_PRIORITY.items():
+
+        company_name = safe_text(
+            company_name
+        ).upper()
+
+        if not company_name:
+            continue
+
+        # Exact company match
+        if company == company_name:
+
+            best_priority = max(
+                best_priority,
+                int(priority),
+            )
+
+        # Safe substring match for names such as
+        # "Tata Consultancy Services - TCS"
+        elif company_name in company:
+
+            best_priority = max(
+                best_priority,
+                int(priority),
+            )
+
+    return best_priority
+
+
+# =========================================================
+# PREFERRED COMPANY CHECK
+# =========================================================
+
+def is_preferred_company(job):
+    """
+    Determine whether the job belongs to one of the
+    preferred companies.
+    """
+
+    return (
+        get_company_priority(job) > 0
     )
 
 
+# =========================================================
+# VERIFIED JOB
 # =========================================================
 
 def is_verified_job(job):
@@ -569,12 +773,12 @@ def is_verified_job(job):
 
     A job is considered verified when:
 
-        - company exists
-        - apply URL exists
-        - source exists
+    - company exists
+    - apply URL exists
+    - source exists
 
-    If a real verified column is added to the
-    database later, this function can be updated.
+    If a real verified column is added to the database
+    later, this function can be updated.
     """
 
     company = safe_text(
@@ -597,6 +801,8 @@ def is_verified_job(job):
 
 
 # =========================================================
+# ABROAD JOB
+# =========================================================
 
 def is_abroad_job(job):
     """
@@ -615,7 +821,7 @@ def is_abroad_job(job):
 
 def posted_date_key(job):
     """
-    Return a sortable posted-date value.
+    Return sortable posted date.
     """
 
     parsed = parse_posted_datetime(
@@ -623,111 +829,13 @@ def posted_date_key(job):
     )
 
     if parsed is None:
-
         return datetime.min
 
-    if parsed.tzinfo is not None:
-
-        parsed = (
-            parsed
-            .astimezone(
-                ZoneInfo("Asia/Kolkata")
-            )
-            .replace(
-                tzinfo=None
-            )
-        )
+    parsed = normalize_datetime(
+        parsed
+    )
 
     return parsed
-
-
-# =========================================================
-# STRICT SEARCH MATCH
-# =========================================================
-
-def search_matches_job(job, search_text):
-    """Return True when a user search matches a job naturally and safely.
-
-    The search box is intentionally simple: HR can type one phrase such as
-    ``UST``, ``IBS``, ``pits``, ``data engineer`` or ``UST data engineer``.
-    No comma-separated search syntax is required.
-
-    Matching rules:
-      * title/company/skills/location are searched;
-      * company aliases are supported (for example ``EY GDS`` -> ``EY``);
-      * short company abbreviations such as ``pits`` match ``PIT Solutions``
-        through a compact company-name comparison;
-      * multi-word searches match the phrase or all search words;
-      * the full description is deliberately not searched to avoid false
-        positives such as ``UST`` matching ``customer``.
-    """
-
-    term = safe_text(search_text).lower()
-
-    if not term:
-        return True
-
-    fields = (
-        safe_text(job.get("title", "")),
-        safe_text(job.get("company", "")),
-        safe_text(job.get("skills", "")),
-        safe_text(job.get("location", "")),
-        safe_text(job.get("source", "")),
-        safe_text(job.get("apply_url", "")),
-    )
-    combined = " ".join(fields).lower()
-
-    # Exact phrase / word-aware match.
-    pattern = re.compile(
-        r"(?<!\w)" + re.escape(term) + r"(?!\w)",
-        re.IGNORECASE,
-    )
-    if pattern.search(combined):
-        return True
-
-    # Company aliases are normalized in the database. This lets searches
-    # such as "EY GDS", "Tata Consultancy Services" or "AWS" find their
-    # canonical company records.
-    try:
-        from services.company.resolver import resolve_alias
-        canonical_term = safe_text(resolve_alias(search_text)).lower()
-    except Exception:
-        canonical_term = ""
-
-    if canonical_term and canonical_term != term:
-        canonical_pattern = re.compile(
-            r"(?<!\w)" + re.escape(canonical_term) + r"(?!\w)",
-            re.IGNORECASE,
-        )
-        if canonical_pattern.search(safe_text(job.get("company", ""))):
-            return True
-
-    # Compact company matching is deliberately conservative.  The old
-    # implementation used ``compact_query in compact_company`` which caused
-    # ``UST`` to match the letters inside ``Customer``.  Only allow a compact
-    # company prefix/exact match or a true company-word acronym.
-    company = safe_text(job.get("company", ""))
-    compact_query = re.sub(r"[^a-z0-9]", "", term)
-    company_words = re.findall(r"[a-z0-9]+", company.lower())
-    compact_company = "".join(company_words)
-    if compact_query and len(compact_query) >= 3:
-        if compact_company == compact_query or compact_company.startswith(compact_query):
-            return True
-        acronym = "".join(word[0] for word in company_words if word)
-        if acronym == compact_query:
-            return True
-
-    # For a multi-word search, require every meaningful word to be present
-    # somewhere in the searchable fields. This makes ``UST data engineer``
-    # useful while keeping the UI free from comma-separated syntax.
-    words = re.findall(r"[a-z0-9]+", term)
-    if len(words) > 1:
-        return all(
-            re.search(r"(?<!\w)" + re.escape(word) + r"(?!\w)", combined, re.IGNORECASE)
-            for word in words
-        )
-
-    return False
 
 
 # =========================================================
@@ -736,45 +844,44 @@ def search_matches_job(job, search_text):
 
 def load_jobs(search_text):
     """
-    Load jobs from the existing database layer.
+    Load current jobs from the existing database.
 
     IMPORTANT:
+    This function does NOT run synchronization.
 
-    This function does NOT run the 6-hour scheduler.
-
-    It simply reads the current database contents.
-
-    If the aggregator updates the database every
-    6 hours, the next portal load will see those
-    newly inserted jobs.
+    It only reads the database and applies the
+    VisionBoard display rules.
     """
 
     search_text = safe_text(
         search_text
     )
 
-    # =====================================================
-    # UAT RULE
-    # =====================================================
+    # -----------------------------------------------------
+    # EXPLICIT EXCLUDED SEARCH
+    # -----------------------------------------------------
+    #
+    # If someone searches only for DevOps or Airflow,
+    # VisionBoard should return no results.
+    #
+    # -----------------------------------------------------
 
-    # If user explicitly searches for a job category
-    # that VisionBoard intentionally excludes,
-    # return no results.
-
-    search_lower = search_text.lower()
+    search_lower = (
+        search_text.lower().strip()
+    )
 
     if (
         search_lower == "devops"
         or search_lower == "airflow"
-        or "devops engineer" in search_lower
-        or "airflow engineer" in search_lower
+        or search_lower == "devops engineer"
+        or search_lower == "airflow engineer"
     ):
 
         return []
 
-    # =====================================================
+    # -----------------------------------------------------
     # DATABASE LOAD
-    # =====================================================
+    # -----------------------------------------------------
 
     with st.spinner(
         "Loading latest opportunities..."
@@ -809,12 +916,11 @@ def load_jobs(search_text):
 
             return []
 
-    # =====================================================
+    # -----------------------------------------------------
     # SAFETY
-    # =====================================================
+    # -----------------------------------------------------
 
     if jobs is None:
-
         return []
 
     try:
@@ -825,39 +931,13 @@ def load_jobs(search_text):
 
         return []
 
-    # =====================================================
-    # UAT VALIDATION
-    # =====================================================
+    # -----------------------------------------------------
+    # VISIONBOARD VALIDATION
+    # -----------------------------------------------------
 
-    if search_text:
-        # Explicit searches are allowed to find any active employer/job.
-        # This is essential for UST/IBS/PITS and unknown-company searches.
-        jobs = filter_search_jobs(jobs)
-
-        # The database query is intentionally broad for compatibility. The
-        # final word-aware matcher prevents false positives such as UST
-        # matching the letters inside "Gusto" or "Customer".
-        jobs = [
-            job
-            for job in jobs
-            if search_matches_job(job, search_text)
-        ]
-    else:
-        # Default feed keeps the existing VisionBoard category policy.
-        jobs = filter_valid_jobs(jobs)
-
-        # Technopark is collected broadly so company searches work, but the
-        # default home feed still shows only the portal's technology focus.
-        jobs = [
-            job
-            for job in jobs
-            if str(job.get("source", "")).strip().lower() != "technopark"
-            or is_relevant_job(
-                job.get("title", ""),
-                job.get("description", ""),
-                job.get("skills", ""),
-            )
-        ]
+    jobs = filter_valid_jobs(
+        jobs
+    )
 
     return jobs
 
@@ -929,14 +1009,17 @@ def prioritize_jobs(jobs):
     """
     VisionBoard ordering:
 
-        1. India + Preferred Company
-        2. India
-        3. Remote + Preferred Company
-        4. Remote
-        5. Abroad + Preferred Company
-        6. Abroad
+    1. India + Preferred Company
+    2. India
+    3. Remote + Preferred Company
+    4. Remote
+    5. Abroad + Preferred Company
+    6. Abroad
 
-    Latest jobs are shown first inside each group.
+    Within each group:
+
+    - Preferred-company priority
+    - Latest posted jobs
     """
 
     india_preferred = []
@@ -951,51 +1034,61 @@ def prioritize_jobs(jobs):
     for job in jobs:
 
         india = is_india_job(job)
-
         remote = is_remote_job(job)
-
         preferred = is_preferred_company(job)
 
         if india:
 
             if preferred:
-
                 india_preferred.append(job)
-
             else:
-
                 india_other.append(job)
 
         elif remote:
 
             if preferred:
-
                 remote_preferred.append(job)
-
             else:
-
                 remote_other.append(job)
 
         else:
 
             if preferred:
-
                 abroad_preferred.append(job)
-
             else:
-
                 abroad_other.append(job)
 
-    groups = [
+    # -----------------------------------------------------
+    # Preferred company groups
+    # -----------------------------------------------------
+
+    preferred_groups = [
         india_preferred,
-        india_other,
         remote_preferred,
-        remote_other,
         abroad_preferred,
+    ]
+
+    for group in preferred_groups:
+
+        group.sort(
+            key=lambda job: (
+                get_company_priority(job),
+                posted_date_key(job),
+            ),
+            reverse=True,
+        )
+
+    # -----------------------------------------------------
+    # Normal groups
+    # -----------------------------------------------------
+
+    normal_groups = [
+        india_other,
+        remote_other,
         abroad_other,
     ]
 
-    for group in groups:
+    for group in normal_groups:
 
         group.sort(
             key=posted_date_key,
@@ -1026,7 +1119,6 @@ def show_top_pagination(
     """
 
     if total_pages <= 1:
-
         return
 
     start_page = max(
@@ -1140,7 +1232,6 @@ def show_bottom_pagination(
     """
 
     if total_pages <= 1:
-
         return
 
     st.divider()
@@ -1217,12 +1308,6 @@ def show_bottom_pagination(
 def show_back_to_top():
     """
     Display Back to Top on the right side.
-
-    The control appears immediately above the
-    About VisionBoard Career Portal section.
-
-    Clicking it returns the user to the
-    VisionBoard top anchor.
     """
 
     st.markdown(
@@ -1261,27 +1346,9 @@ def show_home(
     remote_only,
     abroad_only,
     verified_only,
-    freshness_filter,
 ):
     """
     Main VisionBoard job-results page.
-
-    Expected filters tuple:
-
-        (
-            search,
-            filter_value,
-            india_only,
-            remote_only,
-            abroad_only,
-            verified_only,
-            freshness_filter,
-        )
-
-    app.py should call:
-
-        filters = show_filters()
-        show_home(*filters)
     """
 
     # =====================================================
@@ -1312,10 +1379,6 @@ def show_home(
     filter_value = safe_text(
         filter_value
     )
-
-    freshness_filter = safe_text(
-        freshness_filter
-    ) or "Any time"
 
     # =====================================================
     # EFFECTIVE FILTER
@@ -1353,7 +1416,6 @@ def show_home(
         bool(remote_only),
         bool(abroad_only),
         bool(verified_only),
-        freshness_filter,
     )
 
     if (
@@ -1382,15 +1444,6 @@ def show_home(
 
     jobs = load_jobs(
         search
-    )
-
-    # =====================================================
-    # JOB FRESHNESS
-    # =====================================================
-
-    jobs = apply_freshness_filter(
-        jobs,
-        freshness_filter,
     )
 
     # =====================================================
@@ -1540,41 +1593,39 @@ def show_home(
     if search:
 
         status_text = (
-            f'Showing results for "{search}"'
+            f'Showing relevant results for "{search}"'
         )
 
     elif effective_filter == "India":
 
         status_text = (
-            "Showing India opportunities."
+            "Showing relevant India opportunities."
         )
 
     elif effective_filter == "Remote":
 
         status_text = (
-            "Showing remote opportunities."
+            "Showing relevant remote opportunities."
         )
 
     elif effective_filter == "Abroad":
 
         status_text = (
-            "Showing global opportunities."
+            "Showing relevant global opportunities."
         )
 
     elif effective_filter == "Verified Jobs":
 
         status_text = (
-            "Showing verified opportunities."
+            "Showing verified VisionBoard opportunities."
         )
 
     else:
 
         status_text = (
-            "Showing the latest opportunities."
+            "Showing the latest relevant "
+            "VisionBoard opportunities."
         )
-
-    if freshness_filter != "Any time":
-        status_text += f" Freshness: {freshness_filter}."
 
     st.info(
         status_text
@@ -1595,8 +1646,9 @@ def show_home(
             """
             ### 💼 Latest Career Opportunities
 
-            Latest opportunities from leading companies
-            across India and worldwide.
+            Latest relevant opportunities from
+            leading companies across India
+            and worldwide.
             """
         )
 
@@ -1616,23 +1668,42 @@ def show_home(
         if search:
 
             st.warning(
-                f'No jobs found matching "{search}".'
+                f'No relevant jobs found matching "{search}".'
+            )
+
+        elif effective_filter == "India":
+
+            st.info(
+                "No relevant India opportunities "
+                "are currently available."
+            )
+
+        elif effective_filter == "Remote":
+
+            st.info(
+                "No relevant remote opportunities "
+                "are currently available."
+            )
+
+        elif effective_filter == "Abroad":
+
+            st.info(
+                "No relevant international opportunities "
+                "are currently available."
             )
 
         else:
 
             st.info(
-                "No jobs are currently available "
-                "for the selected filter."
+                "No relevant jobs are currently "
+                "available for the selected filter."
             )
 
         st.caption(
-            "Try a different keyword or select "
-            '"All Jobs".'
+            "Try another technology, company, "
+            "location or job title."
         )
 
-        # Back to Top is still available
-        # above the About section.
         show_back_to_top()
 
         return
@@ -1644,7 +1715,7 @@ def show_home(
     st.caption(
         f"Showing {start + 1}–"
         f"{min(end, total_jobs)} "
-        f"of {total_jobs} opportunities."
+        f"of {total_jobs} relevant opportunities."
     )
 
     st.write("")
@@ -1675,10 +1746,6 @@ def show_home(
 
     # =====================================================
     # BACK TO TOP
-    #
-    # IMPORTANT:
-    # This is intentionally BEFORE the About section.
-    # It is aligned to the RIGHT.
     # =====================================================
 
     show_back_to_top()
@@ -1698,17 +1765,17 @@ def show_home(
         )
 
         st.caption(
-            "Latest jobs aggregated from multiple "
-            "trusted job portals."
+            "Latest relevant jobs aggregated from "
+            "multiple trusted job portals."
         )
 
         st.caption(
             "Priority is given to Indian opportunities, "
             "remote roles, preferred companies and "
-            "global careers."
+            "relevant global careers."
         )
 
         st.caption(
-            "Jobs are ranked to help candidates "
-            "find relevant opportunities faster."
+            "Jobs are filtered and ranked to help "
+            "candidates find relevant opportunities faster."
         )

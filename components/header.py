@@ -70,7 +70,7 @@ def show_header():
                     "companies across India and worldwide."
                 )
 
-        with right:
+        #with right:
 
            # c1, c2 = st.columns(2)
 
@@ -82,6 +82,6 @@ def show_header():
 
              #   st.info(" Remote Jobs")
 
-            st.success(
-                "✔ Updated Every 6 Hours"
-            )
+            #st.success(
+            #    "✔ Updated Every 6 Hours"
+           # )

@@ -26,7 +26,6 @@ from database.db_service import (
     get_last_successful_sync,
 )
 
-from services.sync_service import maybe_run_scheduled_sync
 
 
 # =========================================================
@@ -87,21 +86,12 @@ st.markdown(
 
 
 # =========================================================
-# AUTOMATIC 6-HOUR SYNCHRONIZATION
+# BACKGROUND SYNCHRONIZATION STATUS
 # =========================================================
 
-# Streamlit Cloud does not keep a Python scheduler process alive reliably.
-# Therefore the existing sync pipeline is invoked on app access only when
-# the last successful sync is older than 6 hours. No job filtering, ranking,
-# ordering, or freshness logic is changed here.
-if "sync_checked" not in st.session_state:
-    st.session_state.sync_checked = True
-    try:
-        with st.spinner("Checking job synchronization..."):
-            maybe_run_scheduled_sync(6)
-    except Exception as exc:
-        st.warning(f"Job sync could not be completed: {exc}")
-
+# Job ingestion is intentionally NOT started by Streamlit. The portal is a
+# read-first client: HR should see the existing database immediately while
+# the external scheduler updates the database independently every 6 hours.
 
 # =========================================================
 # METRICS
@@ -150,15 +140,25 @@ metrics = {
 # HEADER
 # =========================================================
 
+#show_header()
+
+#if last_sync:
+#    st.caption(
+#        f"🔄 Last sync completed: {formatted_last_sync} • Next sync check: {next_sync_display}"
+#    )
+#else:
+  #  st.caption("🔄 Last sync completed: Not available • Waiting for the scheduled background refresh")
 show_header()
 
 if last_sync:
-    st.caption(
-        f"🔄 Last sync completed: {formatted_last_sync} • Next sync check: {next_sync_display}"
-    )
+    caption_text = f"🔄 Last sync completed: {formatted_last_sync} • Next sync check: {next_sync_display}"
 else:
-    st.caption("🔄 Last sync completed: Not available • Initial synchronization will run automatically")
+    caption_text = "🔄 Last sync completed: Not available • Waiting for the scheduled background refresh"
 
+st.markdown(
+    f"<p style='text-align: right; color: blue; font-size: 0.8em;'>{caption_text}</p>",
+    unsafe_allow_html=True
+)
 
 # =========================================================
 # SEARCH + FILTERS

@@ -15,6 +15,7 @@ Handles:
 
 import os
 import sqlite3
+import re
 from typing import Dict, List, Optional, Any
 
 # =========================================================
@@ -113,14 +114,32 @@ def execute_query(
 
 
 # =========================================================
+# SCHEMA COMPATIBILITY / MIGRATIONS
+# =========================================================
+
+def ensure_jobs_schema():
+    """Additive schema migration for fields introduced after V4.
+
+    Existing databases are preserved; missing columns are added in place.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(jobs)").fetchall()}
+        if "closing_date" not in columns:
+            conn.execute("ALTER TABLE jobs ADD COLUMN closing_date TEXT")
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# =========================================================
 # CREATE INDEXES
 # =========================================================
 
 def create_indexes():
-    """
-    Safe to execute multiple times.
-    Improves search performance.
-    """
+    """Safe to execute multiple times and migrate older V4 databases."""
+
+    ensure_jobs_schema()
 
     indexes = [
 
@@ -351,11 +370,12 @@ def insert_job(job: Dict) -> bool:
         source,
         apply_url,
         posted_date,
+        closing_date,
         updated_at
     )
     VALUES
     (
-        ?,?,?,?,?,?,?,?,?,?,?,?,
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,
         CURRENT_TIMESTAMP
     )
     """
@@ -385,6 +405,8 @@ def insert_job(job: Dict) -> bool:
         job.get("apply_url"),
 
         job.get("posted_date"),
+
+        job.get("closing_date"),
 
     )
 
@@ -430,11 +452,12 @@ def insert_jobs(jobs: List[Dict]) -> int:
         source,
         apply_url,
         posted_date,
+        closing_date,
         updated_at
     )
     VALUES
     (
-        ?,?,?,?,?,?,?,?,?,?,?,?,
+        ?,?,?,?,?,?,?,?,?,?,?,?,?,
         CURRENT_TIMESTAMP
     )
     """
@@ -471,6 +494,8 @@ def insert_jobs(jobs: List[Dict]) -> int:
 
                 job.get("posted_date"),
 
+                job.get("closing_date"),
+
             )
 
         )
@@ -484,6 +509,108 @@ def insert_jobs(jobs: List[Dict]) -> int:
     conn.close()
 
     return inserted
+
+
+# =========================================================
+# REPLACE SOURCE JOBS ATOMICALLY
+# =========================================================
+
+def replace_source_and_insert_jobs(
+    jobs: List[Dict],
+    source: str = "Technopark",
+) -> int:
+    """Atomically replace one source's rows and insert the sync batch.
+
+    This is used for directory-style sources such as Technopark.
+
+    Why:
+        The Technopark parser was previously storing malformed employer
+        names such as "Menu".  A normal INSERT OR REPLACE cannot remove those
+        stale rows because their job IDs are different from the corrected
+        records.
+
+    Safety:
+        - If the incoming batch is empty, nothing is deleted.
+        - Delete + insert happen in one SQLite transaction.
+        - If insertion fails, the transaction rolls back and the old source
+          data remains intact.
+        - Other sources are never deleted.
+    """
+    if not jobs:
+        return 0
+
+    source_value = str(source or "").strip()
+
+    conn = get_connection()
+
+    try:
+        cursor = conn.cursor()
+
+        # Replace only the requested source.  The caller only uses this
+        # function after a successful source collection.
+        cursor.execute(
+            """
+            DELETE FROM jobs
+            WHERE LOWER(TRIM(source)) = LOWER(TRIM(?))
+            """,
+            (source_value,),
+        )
+
+        query = """
+        INSERT OR REPLACE INTO jobs
+        (
+            job_id,
+            title,
+            company,
+            location,
+            country,
+            employment_type,
+            skills,
+            salary,
+            description,
+            source,
+            apply_url,
+            posted_date,
+            closing_date,
+            updated_at
+        )
+        VALUES
+        (
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,
+            CURRENT_TIMESTAMP
+        )
+        """
+
+        records = [
+            (
+                job.get("job_id"),
+                job.get("title"),
+                job.get("company"),
+                job.get("location"),
+                job.get("country"),
+                job.get("employment_type"),
+                job.get("skills"),
+                job.get("salary"),
+                job.get("description"),
+                job.get("source"),
+                job.get("apply_url"),
+                job.get("posted_date"),
+                job.get("closing_date"),
+            )
+            for job in jobs
+        ]
+
+        cursor.executemany(query, records)
+        conn.commit()
+
+        return cursor.rowcount
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()
 
 
 # =========================================================
@@ -670,10 +797,15 @@ def search_jobs(
             OR LOWER(skills) LIKE ?
             OR LOWER(description) LIKE ?
             OR LOWER(location) LIKE ?
+            OR LOWER(source) LIKE ?
+            OR LOWER(apply_url) LIKE ?
+            OR REPLACE(REPLACE(REPLACE(LOWER(company), ' ', ''), '.', ''), '&', '') LIKE ?
         )
         """
 
         pattern = f"%{keyword.lower()}%"
+
+        compact_pattern = f"%{re.sub(r'[^a-z0-9]', '', keyword.lower())}%"
 
         params.extend([
             pattern,
@@ -681,6 +813,9 @@ def search_jobs(
             pattern,
             pattern,
             pattern,
+            pattern,
+            pattern,
+            compact_pattern,
         ])
 
     # -----------------------------------------------------

@@ -94,6 +94,8 @@ def create_tables(cursor):
 
             posted_date TEXT,
 
+            closing_date TEXT,
+
             updated_at TIMESTAMP
             DEFAULT CURRENT_TIMESTAMP
         )
@@ -152,6 +154,9 @@ def create_indexes(cursor):
 
         CREATE INDEX IF NOT EXISTS idx_posted_date
         ON jobs(posted_date);
+
+        CREATE INDEX IF NOT EXISTS idx_closing_date
+        ON jobs(closing_date);
 
         CREATE INDEX IF NOT EXISTS idx_updated
         ON jobs(updated_at);
