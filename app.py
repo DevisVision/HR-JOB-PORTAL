@@ -147,7 +147,7 @@ metrics = {
 #        f"🔄 Last sync completed: {formatted_last_sync} • Next sync check: {next_sync_display}"
 #    )
 #else:
-  #  st.caption("🔄 Last sync completed: Not available • Waiting for the scheduled background refresh")
+#    st.caption("🔄 Last sync completed: Not available • Waiting for the scheduled background refresh")
 show_header()
 
 if last_sync:

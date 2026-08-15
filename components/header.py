@@ -82,6 +82,6 @@ def show_header():
 
              #   st.info(" Remote Jobs")
 
-            #st.success(
-            #    "✔ Updated Every 6 Hours"
-           # )
+        #    st.success(
+        #        "✔ Updated Every 6 Hours"
+        #    )

@@ -1,4 +1,4 @@
-"""Final V5 verification.
+"""Final V5 verification helper.
 
 Run from the project root:
 
